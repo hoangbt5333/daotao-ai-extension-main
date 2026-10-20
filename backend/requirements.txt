@@ -1,0 +1,30 @@
+# FastAPI and web framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Pydantic for data validation
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# File processing
+pdfplumber==0.10.3
+python-docx==1.1.0
+openpyxl==3.1.2
+
+# HTTP requests for LLM APIs
+requests==2.31.0
+
+# XML processing
+lxml==4.9.3
+
+# Environment variables
+python-dotenv==1.0.0
+
+# Logging and utilities
+structlog==23.2.0
+
+# Development and testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+httpx==0.25.2 

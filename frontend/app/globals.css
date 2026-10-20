@@ -1,0 +1,109 @@
+:root {
+  --primary-blue: #1a357a;
+  --primary-blue-light: #2d4d9c;
+  --primary-blue-dark: #11224d;
+  --white: #fff;
+  --gray-bg: #f5f7fa;
+  --border-radius: 12px;
+  --shadow: 0 2px 16px rgba(26,53,122,0.08);
+  --font-main: 'Segoe UI', 'Roboto', Arial, sans-serif;
+}
+
+html, body {
+  background: var(--gray-bg);
+  color: var(--primary-blue-dark);
+  font-family: var(--font-main);
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+.main-header {
+  background: linear-gradient(90deg, var(--primary-blue), var(--primary-blue-light));
+  color: var(--white);
+  padding: 24px 0 16px 0;
+  box-shadow: var(--shadow);
+}
+.logo {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.subtitle {
+  font-size: 1rem;
+  opacity: 0.85;
+  margin-left: 4px;
+}
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+.main-content {
+  background: var(--white);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+  margin-top: -32px;
+  min-height: 70vh;
+  padding: 32px 0 32px 0;
+}
+
+button, input[type="file"], textarea {
+  font-family: var(--font-main);
+}
+button {
+  background: var(--primary-blue);
+  color: var(--white);
+  border: none;
+  border-radius: 6px;
+  padding: 8px 20px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(26,53,122,0.08);
+  transition: background 0.2s;
+}
+button:disabled {
+  background: #b3bedb;
+  cursor: not-allowed;
+}
+button:hover:not(:disabled) {
+  background: var(--primary-blue-light);
+}
+input[type="file"] {
+  background: var(--gray-bg);
+  border-radius: 6px;
+  padding: 6px;
+  border: 1px solid #e0e6f0;
+}
+textarea {
+  border-radius: 8px;
+  border: 1px solid #e0e6f0;
+  padding: 10px;
+  width: 100%;
+  font-size: 1rem;
+  margin-top: 8px;
+  margin-bottom: 8px;
+  min-height: 120px;
+  resize: vertical;
+  background: #fafdff;
+}
+pre {
+  background: #f3f6fa;
+  border-radius: 8px;
+  padding: 12px;
+  overflow-x: auto;
+  font-size: 0.98rem;
+}
+@media (max-width: 600px) {
+  .container {
+    padding: 0 4px;
+  }
+  .main-content {
+    padding: 16px 0;
+  }
+  .logo {
+    font-size: 1.3rem;
+  }
+}

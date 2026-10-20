@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.pdb
+*.egg-info/
+venv/
+.env
+.env.*
+.DS_Store
+
+# FastAPI/Backend
+backend/venv/
+backend/__pycache__/
+backend/*.pyc
+backend/.env
+backend/.env.*
+backend/exports/
+backend/uploads/
+
+# Node/Next.js/Frontend
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/.env
+frontend/.env.*
+frontend/.turbo/
+frontend/.vercel/
+
+# Build output
+*.tar.gz
+*.zip
+*.log
+
+# OS junk
+Thumbs.db
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Exported courses
+exports/
+tdc*/
+course_export*.tar.gz
+
+# Misc
+*.bak
+*.tmp 
