@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sample-output status="NOT GENERATED">
+  <reason>Python and pytest are unavailable; Docker daemon is unavailable. These are expected output notes, not captured output from the exporter.</reason>
+  <question index="1" question="Câu 1: Trong đáp án có ký tự ! và @ thì nội dung được giữ thế nào?" tags="[&quot;de0&quot;]">
+    <expected choicegroup-type="MultipleChoice" shuffle="true">
+      <choice correct="false">Dùng ! và @ như ký tự thông thường</choice>
+      <choice correct="false">Xóa mọi ký tự đặc biệt</choice>
+    </expected>
+  </question>
+  <question index="2" question="Câu 2: Kết quả 2 + 2 là bao nhiêu?" tags="[&quot;de0&quot;]">
+    <expected choicegroup-type="MultipleChoice" shuffle="true">
+      <choice correct="true">4</choice>
+      <choice correct="false">5</choice>
+    </expected>
+  </question>
+  <question index="3" question="Câu 3: Tag tiếng Việt có dấu được viết ra sao?" tags="[&quot;de0&quot;]">
+    <expected choicegroup-type="MultipleChoice" shuffle="true">
+      <choice correct="false">Giữ nguyên tiếng Việt</choice>
+      <choice correct="false">Chuyển thành ASCII</choice>
+    </expected>
+  </question>
+  <question index="4" question="Câu 4: Dấu @ trong câu trả lời là gì?" tags="[&quot;de1&quot;]">
+    <expected choicegroup-type="MultipleChoice" shuffle="true">
+      <choice correct="false">Ký hiệu không hợp lệ</choice>
+      <choice correct="true">Một ký tự nội dung</choice>
+    </expected>
+  </question>
+  <question index="5" question="Câu 5: Có thể có nhiều tag trên một câu không?" tags="[&quot;de1&quot;]">
+    <expected choicegroup-type="MultipleChoice" shuffle="true">
+      <choice correct="true">Có, nếu định dạng hỗ trợ</choice>
+      <choice correct="false">Không</choice>
+    </expected>
+  </question>
+</sample-output>

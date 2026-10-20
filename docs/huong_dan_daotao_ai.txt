@@ -1,0 +1,245 @@
+TRÍCH XUẤT TÀI LIỆU HƯỚNG DẪN DAOTAO.AI CHO GIẢNG VIÊN
+(Nội dung chi tiết các mục 2.10, 3.4, 3.5–3.6, 3.7 và 3.14)
+
+2.10. Backup & restore nội dung môn học
+Định kỳ hoặc sau mỗi khi cập nhật nội dung mới cho khóa học, staff cần backup nội dung khóa học để khi cần có thể restore lại, đặc biệt là trong thời gian hệ thống mới đưa vào sử dụng. Các bước thực hiện:
+1. Login LMS với account staff: http://study.soict.ai (hoặc https://soict.daotao.ai)
+2. Vào môn học, click button <View in Studio>
+3. Menu “Tools / Export” & click button <Export Course Contents>. Lưu lại file
+4. Download file vừa export bằng button <Download Exported Course> và backup file này
+5. Để restore nội dung khóa học, chọn menu “Tools / Import” rồi chọn file “tar.gz” đã export trước đây
+3.4. Các loại nội dung học liệu trong Unit
+Sau khi cấu trúc Section/Subsection đã được khởi tạo cho môn học, cần đưa các nội dung bài học của môn học gắn vào theo cấu trúc này. Mỗi bài học được thiết lập bằng một Unit và được gắn vào trong Subsection. Nhiều Unit có thể gắn lần lượt trong một Subsection. Điểm khác nhau giữa Unit với Section/Subsection là Unit chứa nội dung, còn Section/Subsection chỉ là các thư mục.
+3.4.1. Thêm nội dung văn bản HTML vào unit
+Văn bản HTML là kiểu dữ liệu đơn giản nhất của Unit. Nội dung văn bản này có thể được trình bày bằng một đoạn text trơn hoặc text kèm format (chữ đậm, chữ nghiêng, đề mục, xuống dòng, v.v..), hoặc cùng với các dữ liệu multimedia phức tạp hơn như hình ảnh, âm thanh, liên kết. Các bước thực hiện:
+1. Tạo Unit, đặt tên, chọn kiểu dữ liệu là HTML/Text
+2. Nhập nội dung của Unit vào và format theo ý muốn (in đậm, in nghiêng, v.v…)
+3. Xuất bản Unit vừa nhập vào, người học sẽ nhận được nội dung Unit với format như đã thiết lập.
+3.4.2. Thêm nội dung PDF vào unit
+Nếu nội dung unit đã được soạn trong một file PDF, giảng viên có thể đưa file PDF này gắn vào Unit tương ứng. Các bước thực hiện như sau:
+1. Chuẩn bị file PDF với tên file ngắn gọn, không chứa dấu cách, không chứa ký tự đặc biệt. Lưu ý không nên đặt tên file bằng tiếng Việt hoặc tiếng Nhật, có thể sẽ tạo ra các lỗi khi người học truy nhập đến file.
+2. Upload file PDF vào hệ thống bằng Studio (chức năng Content / Files & Uploads).
+3. Tạo Unit với kiểu dữ liệu PDF.
+4. Cấu hình đường dẫn file PDF trong phần thiết lập của Unit.
+5. Publish Unit và người học sẽ xem được file PDF này khi truy nhập đến unit tương ứng.
+3.4.3. Thêm nội dung audio vào unit
+• File audio cần được chuyển sang khuôn dạng MP3, upload lên phần “Nội dung / Tệp & tải lên” (Files & Uploads) và copy link “Studio”. Nếu file to, không upload lên server MOOC được thì có thể sử dụng một server public trên Internet để upload file audio, và copy link URL đến file audio này.
+• Thêm một nội dung kiểu “HTML / raw HTML” vào unit.
+• Đưa đường dẫn file audio vào raw HTML theo cú pháp HTML tag audio:
+<p>File nghe bài 4</p>
+<audio controls>
+  <source src="/static/聴解タスクL4-3.mp3" type="audio/mp3">
+</audio>
+3.4.4. Thêm nội dung video vào unit
+Trường hợp unit có nội dung là một file video clip, làm tương tự như với trường hợp unit PDF. Các bước như sau:
+1. Chuẩn bị file clip với qui tắc đặt tên như file PDF và upload clip vào hệ thống.
+2. Copy URL của clip trong hệ thống. Chú ý copy đầy đủ URL (button <Web> trong cột “Copy URLs”). Kiểm tra nội dung URL đầy đủ cần có dạng (chú ý bắt đầu bằng “https://”):
+https://study.soict.ai/asset-v1:HEDSPI+JP2121+2021-1+type@asset+block@DemoLesson_online_Trim.mp4
+3. Vào course outline và tạo Unit với kiểu dữ liệu Video.
+4. Nhập tên video clip và paste URL đã copy trong bước trên. Theo chỉ dẫn, hệ thống chấp nhận file clip dạng mp4, ogg hoặc webm.
+5. Publish unit và người học sẽ xem được video clip của unit.
+Lưu ý: Phương pháp tạo unit có nội dung từ một video clip như trên có ưu điểm là file được upload vào hệ thống nên người học xem file nhanh, không cần tương tác với hệ thống thứ ba. Nhược điểm là phương pháp này đòi hỏi máy chủ MOOC phải chịu tải lớn trong quá trình học viên xem video, và vì vậy chỉ giới hạn các file có kích thước tối đa 10Mb.
+3.4.5. Thêm video từ Youtube vào unit
+1. Click button “Create” ở góc trên bên phải màn hình Youtube để tải video lên.
+2. Thực hiện các bước theo hướng dẫn trong Youtube để hoàn thành tải video. Lưu ý video phải để ở chế độ cho phép truy nhập Public hoặc Unlisted. Copy url truy nhập video (shareable link).
+3. Thêm Unit và Video component rồi sử dụng shareable link vừa copy vào outline khóa học như trong hướng dẫn ở phần trên.
+3.4.6. Thêm nội dung từ Google Drive vào unit
+Các dạng file (như Google Document) có thể được nhúng (embedded) từ Google Drive vào một Unit. Các bước thực hiện:
+1. Chuẩn bị Google Document và copy share link dạng view public.
+2. Tạo Unit tại vị trí phù hợp trên outline môn học, chọn Unit dạng “Advanced / Google Document”.
+3. Chọn Sửa các thông số cho Unit này. Tìm đến trường “src” trong tag “iframe” và paste link đến Google Document đã copy bước trên. Lưu thông tin này vào Unit. Google Document đã chuẩn bị trong bước 1 sẽ được hiển thị trong outline môn học khi người học di chuyển đến mục outline này.
+3.4.7. Thêm nội dung PDF từ Google Drive vào unit
+Các file PDF không phải là một định dạng riêng trong bộ Google Doc, tuy nhiên được sử dụng rộng rãi trong việc chia sẻ public. Việc nhúng một nội dung PDF trực tiếp từ Google Drive vào khóa học cho phép giáo viên thay đổi nội dung file PDF trên Google Drive mà không cần cập nhật lại file PDF này vào khóa học. Các bước thực hiện như sau:
+1. Upload file PDF lên Google Drive, bật chế độ chia sẻ công khai (Anyone with link).
+2. Mở file PDF trên Google Drive, chọn 'Mở trong cửa sổ mới' (Open in new window), chọn 'Nhúng mục...' (Embed item...) và copy đoạn mã HTML <iframe>.
+3. Vào Studio khóa học, tạo Unit với mục dữ liệu dạng Raw HTML.
+4. Edit mục dữ liệu Raw HTML, xóa nội dung mặc định và dán đoạn mã HTML nhúng từ Google Drive.
+5. Chỉnh sửa kích thước chiều cao và chiều rộng khung hình hiển thị nội dung PDF cho phù hợp. Khuyến cáo nên chỉnh kích thước này là 1200 chiều rộng và 540 chiều cao (width="1200" height="540").
+3.4.8. Thêm nội dung video từ Google Drive vào unit
+Một video có thể được lưu trữ và chia sẻ (public hoặc theo từng tài khoản Gmail) từ Google Drive. Để đưa video chia sẻ từ Google Drive vào outline môn học, cách làm là sử dụng Embed HTML tương tự trường hợp với Microsoft Stream Server. Dùng web browser mở View video bằng URL trên Google Drive. Chọn menu “Embed item…” rồi copy mã embed HTML vào Unit dạng Raw HTML trong outline môn học.
+3.4.9. Thêm nội dung từ Microsoft SharePoint vào unit
+Tương tự như với Google Drive, các file PPT, Doc, Excel, v.v.. được lưu trữ trên Microsoft SharePoint có thể được đưa vào khóa học như một học liệu dưới dạng khung nhúng Iframe HTML.
+3.4.10. Thêm nội dung PDF từ Microsoft SharePoint hoặc OneDrive vào unit
+Lấy đoạn mã nhúng (Embed code) từ tài liệu lưu trữ trên SharePoint/OneDrive, tạo Unit trong Studio với kiểu dữ liệu Raw HTML và dán mã nhúng vào. Publish Unit để hiển thị tài liệu.
+3.4.11. Thêm nội dung video từ Microsoft Stream server vào unit
+1. Vào Microsoft Stream server (https://www.microsoft.com/en-ww/microsoft-365/microsoft-stream), login và tìm đến clip cần đưa vào unit.
+2. Chọn “Share” kiểu Embed rồi copy HTML code.
+3. Tạo Unit với nội dung dạng “HTML / Raw HTML”, paste mã HTML đã copy bên trên vào. Publish unit, kết quả là người học khi vào Unit này và login vào Microsoft Stream server thì sẽ truy nhập được đến video bài giảng tương ứng.
+3.4.12. Thêm một gói học liệu SCORM vào Unit
+SCORM (Sharable Content Object Reference Model) là một chuẩn đóng gói học liệu cho phép đóng gói toàn bộ học liệu của một bài học, hoặc thậm chí là một môn học cùng với các tương tác có thể của người dùng trên học liệu này vào một file ZIP. Nhược điểm của SCORM là việc thay đổi cập nhật nội dung các học liệu đòi hỏi một quá trình khá phức tạp. Để đưa một gói SCORM vào Unit, thực hiện các bước:
+1. Khai báo module nâng cao “scormxblock” trong Studio / Settings / Advanced Settings (mục Advanced Module List).
+2. Tạo Unit trong course outline và chọn mục Advanced / SCORM để đưa vào Unit này.
+3. Click Edit để soạn nội dung SCORM và chọn file ZIP chứa học liệu SCORM đã được đóng gói để upload vào hệ thống.
+4. Hoàn thành và publish Unit, xem trong LMS sẽ thấy nội dung SCORM xuất hiện, cho phép người học xem và thực hiện các tương tác với học liệu trong gói SCORM này.
+3.5. Thêm câu hỏi trắc nghiệm vào nội dung học
+Các dạng câu hỏi trắc nghiệm có thể được đưa vào trong unit, xen kẽ với các mục nội dung khác như text, pdf, video. Unit cũng có thể được xây dựng gồm toàn câu hỏi trắc nghiệm (ví dụ unit phục vụ kiểm tra kiến thức). Trường hợp unit là một bài kiểm tra, thường bố trí unit này vào cuối các Section hoặc Subsection như là bài kiểm tra hết chương hoặc hết môn học. Để thêm câu hỏi vào unit chọn thêm nội dung kiểu “Problem”.
+3.5.1. Các dạng câu hỏi trắc nghiệm đơn giản
+MOOC Daotao.ai hỗ trợ tất cả các loại câu hỏi trắc nghiệm phổ biến dưới dạng Text đơn giản:
+• Câu hỏi 1 phương án đúng (Radio button / MultipleChoice):
+Nội dung câu hỏi?
+( ) Phương án sai 1
+(x) Phương án đúng
+( ) Phương án sai 2
+• Câu hỏi nhiều phương án đúng (Checkboxes):
+Nội dung câu hỏi?
+[x] Phương án đúng 1
+[ ] Phương án sai
+[x] Phương án đúng 2
+• Câu hỏi dạng danh sách thả xuống (Dropdown):
+Nội dung câu hỏi [[Phương án sai 1, (Phương án đúng), Phương án sai 2]]
+• Câu hỏi nhập text/số (Text/Numerical Input):
+Nội dung câu hỏi = Đáp án đúng
+3.5.2. Bổ sung thông tin giải thích đáp án
+Thông tin giải thích có thể được thêm vào cho tất cả các dạng câu hỏi bằng cú pháp [explanation] ở cuối câu hỏi:
+Nội dung câu hỏi?
+( ) Phương án sai
+(x) Phương án đúng
+[explanation]
+Nội dung giải thích chi tiết đáp án tại đây...
+[explanation]
+3.5.3. Phương pháp chấm điểm các câu trắc nghiệm
+Qui tắc chấm điểm được áp dụng cho từng loại câu hỏi như sau:
+• Câu hỏi 1 phương án đúng - dạng radio button (multiplechoice): điểm được cho khi chọn đúng phương án trả lời.
+• Câu hỏi nhiều phương án đúng - dạng checkbox: mặc định điểm chỉ được cho (100%) khi chọn đúng, đủ, không thừa tất cả các phương án trả lời. Giáo viên có thể chuyển sang áp dụng phương án cho điểm đúng một phần (partial credit) bằng cách chuyển câu hỏi sang định dạng XML tag và đưa tham số partial_credit="halves" vào thẻ <choiceresponse>:
+<problem>
+  <choiceresponse partial_credit="halves">
+    <p>Nội dung câu hỏi?</p>
+    <checkboxgroup>
+      <choice correct="true">Đáp án đúng 1</choice>
+      <choice correct="true">Đáp án đúng 2</choice>
+      <choice correct="false">Đáp án sai</choice>
+    </checkboxgroup>
+  </choiceresponse>
+</problem>
+3.5.4. Xử lý các ký tự HTML entity trong nội dung
+Trường hợp nội dung text có chứa các ký tự mã thẻ HTML không đúng chuẩn (như <, >, &), bạn sẽ không ghi lại được nội dung câu hỏi. Hãy chuyển các ký tự này sang dạng HTML entities tương ứng: &lt; thay cho <, &gt; thay cho >, &amp; thay cho &.
+3.5.5. Thiết lập style hiển thị text với các thẻ HTML chuẩn
+Các nội dung text trong câu hỏi cũng như trong phương án trả lời có thể được thiết lập định dạng bằng các thẻ HTML chuẩn như <b> (chữ đậm), <i> (chữ nghiêng), <u> (gạch chân), <code> (mã nguồn), <pre> (khối mã giữ nguyên định dạng).
+3.5.6. Biểu thức toán học
+Hệ thống hỗ trợ hiển thị biểu thức toán học MathJax. Sử dụng cú pháp \(...\) cho công thức inline trên cùng dòng hoặc \[...\] cho công thức dạng khối.
+3.5.7. Thiết lập các thông số cho câu hỏi trắc nghiệm
+Trong tab Settings của câu hỏi Problem, giáo viên có thể thiết lập: Display Name (Tên hiển thị), Maximum Attempts (Số lần làm bài tối đa), Problem Weight (Điểm số của câu hỏi), Show Answer (Cấu hình thời điểm hiển thị đáp án cho học viên).
+3.5.8. Câu hỏi radio button: ngẫu nhiên thứ tự các phương án trả lời
+Cho phép xáo trộn thứ tự phương án trả lời bằng cách chọn option trong Settings hoặc thêm thuộc tính shuffle="true" vào tag <choicegroup> trong cấu trúc XML.
+3.5.9. Bài tập nhiều câu hỏi
+Trong cùng một Problem component, có thể biên soạn nhiều câu hỏi nối tiếp nhau bằng cách ngăn cách giữa các câu hỏi bằng đường phân cách hoặc dòng trống. Hệ thống sẽ gom chung các câu hỏi này trong 1 khối bài tập.
+3.5.10. Chèn hình ảnh vào câu hỏi
+Nội dung câu hỏi (phần mô tả hoặc phương án trả lời) có thể gắn hình ảnh bằng tag <img> và URL link. Có 2 đường link URL có thể sử dụng: Link Studio (/static/img.png, chỉ hiệu lực trong nội bộ môn học) và Link Web đầy đủ domain (hiệu lực công khai). Để upload ảnh, vào Studio môn học > chọn “Content / Files & Uploads”.
+<p>Mô tả câu hỏi kèm ảnh:</p>
+<img width="450" src="/static/Screen-Shot-example.png" />
+(x) Phương án đúng
+( ) Phương án sai
+3.6. Sử dụng định dạng nâng cao (XML) cho câu hỏi trắc nghiệm
+3.6.1. Chuyển định dạng câu hỏi từ text sang XML tag (nâng cao)
+Câu hỏi được nhập vào khóa học mặc định theo định dạng text đơn giản. Nút “Advanced Editor” chuyển định dạng câu hỏi từ text sang nâng cao (XML tag), cho phép giáo viên thiết lập nhiều thông số nâng cao và xử lý các hình thức trình bày phức tạp. Lưu ý: Một câu hỏi đã chuyển sang định dạng XML tag sẽ không chuyển về định dạng text được nữa.
+3.6.2. Phương án trả lời có nhiều dòng
+Khi phương án trả lời gồm nhiều dòng, cần chuyển nội dung câu hỏi sang dạng XML tag. Mỗi phương án trả lời được đóng gói trong một thẻ <choice> nên có thể chứa nhiều dòng văn bản/mã nguồn:
+<problem>
+  <p>Cấu trúc tối thiểu được khuyến nghị của một hợp đồng trong Cosmwasm là gì?</p>
+  <multiplechoiceresponse>
+    <choicegroup type="MultipleChoice">
+      <choice correct="true">
+        src:
+        contract.rs
+        error.rs
+        lib.rs
+      </choice>
+      <choice correct="false">
+        src:
+        contract.rs
+        help.rs
+      </choice>
+    </choicegroup>
+  </multiplechoiceresponse>
+</problem>
+3.6.3. Câu hỏi nhập text: phân biệt chữ hoa và tăng độ dài trường input box
+Câu hỏi dạng nhập text mặc định không phân biệt chữ hoa chữ thường. Để bắt buộc phân biệt chữ hoa chữ thường và tùy biến độ dài ô nhập liệu, chuyển sang dạng nâng cao với tham số type="cs" trong thẻ <stringresponse> và thẻ <textline size="20"/>:
+<problem>
+  <stringresponse answer="Việt Nam" type="cs">
+    <p>Đất nước hình chữ S mà mọi người luôn yêu quý có tên là gì?</p>
+    <p>Nhập tên tiếng Việt có dấu (mã Unicode UTF-8), gồm 2 âm tiết viết hoa chữ cái đầu.</p>
+    <i>Lưu ý câu hỏi này phân biệt chữ hoa và chữ thường.</i>
+    <additional_answer answer="ViệtNam"/>
+    <textline size="20"/>
+  </stringresponse>
+</problem>
+3.6.4. Câu hỏi nhập text: text nhập vào là một xâu các chữ số
+Sử dụng thẻ <stringresponse> cho câu hỏi nhập xâu chữ số (ví dụ nhập số IP, số tài khoản) để tránh bị hệ thống tự động ép kiểu và tính toán như một giá trị số học.
+3.6.5. Câu hỏi chọn từ để điền vào chỗ trống: định dạng “inline”
+Để danh sách chọn từ hiển thị nằm trên cùng một dòng (inline) với đoạn văn bản thay vì xuống dòng riêng biệt, chuyển sang định dạng XML tag và sử dụng kết hợp các thẻ <pre>, <span> và <optioninput>:
+<problem>
+  <optionresponse>
+    <p>Hãy lựa chọn từ thích hợp để điền vào chỗ trống trong câu thơ sau đây:</p>
+    <pre>
+Công cha <optioninput options="('như sông','như núi','to lớn')" correct="như núi"/> <span/> thái sơn
+Nghĩa mẹ như nước <optioninput options="('trong nguồn','trong suối','trong biển')" correct="trong nguồn"/> <span/> chảy ra.
+    </pre>
+  </optionresponse>
+</problem>
+3.7. Câu hỏi gắn trong video (interactive video)
+Đây là dạng unit được xây dựng kết hợp từ 2 thành phần: video và câu hỏi. Để sử dụng loại học liệu này, yêu cầu khai báo invideoquiz_v2 trong danh sách các module nâng cao (Studio / Settings / Advanced Settings / Advanced Module List).
+Khi người học xem video đến một mốc thời gian xác định hoặc ngẫu nhiên xung quanh một mốc thời gian nào đó, câu hỏi sẽ được hiển thị để người học trả lời rồi mới tiếp tục xem tiếp video. Các bước thực hiện như sau:
+1. Di chuyển đến section/subsection phù hợp và tạo unit, giả sử đặt tên là “Interactive Video”.
+2. Mở unit “Interactive Video” vừa tạo và đưa vào video. Lưu ý là phải đưa vào dạng Video component (câu hỏi trong video không áp dụng với iframe/raw html).
+3. Lần lượt đưa các câu hỏi (Problem component) vào bên dưới video trong unit này. Lưu ý là video và các câu hỏi phải được tạo trong cùng một unit.
+4. Thêm thành phần “Advanced / In-Video Quiz XBlock v2” vào cuối unit.
+Nội dung của “In-Video Quiz XBlock v2” gồm 2 thành phần: Video Location (mã số ID video trong unit) và Problem Timemap (mã số ID các câu hỏi trong unit cùng với vị trí gắn vào video). Vị trí gắn vào video được đổi ra đơn vị giây và có thể là cố định (ví dụ “300” tức là giây thứ 300 trong video) hoặc có thể là ngẫu nhiên trong khoảng thời gian (ví dụ “350-400” là ngẫu nhiên trong khoảng từ giây thứ 350 đến 400 trong video).
+Cấu hình mẫu trong In-Video Quiz XBlock v2:
+Video Location: 51c89cd05ea040f1bb74f90256ae3a90
+
+Problem Timemap:
+{
+  "300" : "9c5093ca0a9e49898b421831d94a51f3",
+  "350-400" : "f495564946c24101b1e46a3bf79a547e"
+}
+5. Để lấy mã số video hay mã số các câu hỏi trong unit, hãy click vào mã ID bên dưới tên của các thành phần này trong unit (mã số sẽ được copy vào clipboard). Việc cuối cùng là mở thành phần “in video quiz” và dán các mã này vào vị trí phù hợp.
+6. Click button “Preview” để kiểm tra thông tin câu hỏi được gắn vào video ở vị trí thời gian đã chính xác chưa. Cuối cùng là publish nội dung unit bao gồm video và các câu hỏi đã được gắn vào theo các mốc thời gian phù hợp.
+3.14. Xây dựng question bank bằng Library
+Library là chức năng trong Open edX cho phép chuẩn bị trước các nội dung (video, HTML, câu hỏi) và sử dụng lại các nội dung học liệu này trong một hoặc nhiều môn học. Ngược lại, một môn học có thể được sử dụng học liệu từ một hoặc nhiều Library. Ngân hàng câu hỏi là một loại học liệu trong Library.
+Phần này hướng dẫn cách sử dụng Library để tạo ngân hàng câu hỏi và sử dụng làm các đề thi trong các môn học.
+3.14.1. Khởi tạo Library hoặc truy nhập đến Library có sẵn
+Với giáo viên đã được tạo và gán Library, các bước để truy nhập đến Library như sau:
+1. Login vào Studio (studio.daotao.ai) hoặc login vào môn học rồi chuyển sang Studio của môn học bằng button “View in Studio”.
+2. Click vào icon góc trên cùng bên trái để về trang chủ trong Studio. Chọn mục “Libraries” (thư viện) để xem các Library mà giáo viên đã được gán quyền truy nhập. Tìm đến Library cần thiết và click vào Library để truy nhập đến nội dung Library.
+3. Tạo các câu hỏi trong Library: Vào Library vừa tạo, chọn loại dữ liệu cần thêm (HTML, Video, Problem). Trong phần Problem có thể chọn chi tiết các loại câu hỏi khác nhau như khi soạn câu hỏi trong khóa học.
+3.14.2. Chia sẻ Library với các giáo viên khác
+Nguyên tắc sử dụng Library là có thể được một nhóm giáo viên cùng soạn nội dung và cùng được sử dụng trong các khóa học của các giáo viên này. Một giáo viên không thuộc nhóm chia sẻ nội dung này sẽ không truy nhập được vào Library cũng như không sử dụng được Library này trong khóa học của mình. Để chia sẻ Library với nhóm giáo viên, truy nhập menu User Access / Team trong Library và thêm tài khoản email giáo viên.
+3.14.3. Quản lý các câu hỏi theo tag & 3.14.4. Tổ chức hệ thống tag
+Trong Library, từng câu hỏi có thể gắn một hoặc nhiều Tag (thẻ phân loại) giúp tìm kiếm, lọc và rút câu hỏi ngẫu nhiên theo từng chủ đề, chương mục hoặc độ khó.
+3.14.5. Import question bank từ Moodle sang Library
+Nếu bạn đang sử dụng Moodle với question bank đã được tạo lập, bạn có thể chuyển đổi nội dung question bank này sang Library theo các bước:
+1. Vào môn học trong Moodle, chọn Question Bank / Export.
+2. Chọn export ra kiểu file 'Moodle XML format' và chọn 'Top for...' để export toàn bộ question bank.
+3. Sau khi export thành công, bạn download file XML từ Moodle.
+4. Upload file XML nhận được lên tool convert tại địa chỉ: https://tool.daotao.ai/
+5. File ZIP sau convert chứa một file CSV liệt kê danh sách các câu hỏi không convert tự động được cùng với lý do và file .tar.gz là kết quả convert.
+6. Quay lại Library trong Studio daotao.ai, chọn menu “Tools / Import” và upload file tar.gz để đưa nội dung các câu hỏi đã convert vào Library.
+7. Kiểm tra tổng số câu hỏi trong Library đã khớp với số câu hỏi trong Moodle.
+8. Lưu ý khi import, hãy chọn đúng chế độ xử lý Expand hoặc Replace:
+   • Replace Import: Toàn bộ nội dung cũ trong Library sẽ bị xóa sạch và thay thế hoàn toàn bằng nội dung trong file tar.gz.
+   • Expand Import: Nội dung từ file import tải lên sẽ được nối thêm vào Library hiện tại.
+9. Xử lý ảnh: Sau khi import Lib từ Moodle, các câu hỏi có chứa ảnh sẽ được lưu dưới dạng base64. Phương pháp này làm giảm hiệu năng của hệ thống cho các lớp thi đông học viên. Hãy chuyển ảnh từ dạng base64 thành file ảnh tĩnh (JPEG/PNG) và upload lên FTP server/Files & Uploads.
+3.14.6. Chỉnh sửa một số text style sau khi import Moodle sang Library
+Nội dung câu hỏi và tag gắn với câu hỏi sẽ được convert tự động từ Moodle vào Library. Cần kiểm tra lại các đoạn mã chương trình và đưa vào tag <pre><code> để định dạng chính xác sau khi import.
+3.14.7. Chèn image vào câu hỏi trong question bank & 3.14.8. Chèn image với mã base64
+Image có thể được chèn vào câu hỏi trong Library bằng link URL public công khai trên Internet (<img src="https://..." />) hoặc sử dụng link Web lấy từ mục Files & Uploads của khóa học. Hạn chế sử dụng chuỗi mã hóa base64 trực tiếp trong tag <img> để tránh làm chậm hệ thống.
+3.14.9. Chọn từng câu hỏi từ Library vào đề thi
+Cho phép giáo viên lựa chọn đích danh từng câu hỏi từ Library để đưa vào đề thi:
+1. Kiểm tra Studio môn học, chọn “Settings / Advanced Settings” và thêm thành phần "manual_select_question" vào Advanced Module List.
+2. Di chuyển đến Section/Subsection/Unit cần đưa câu hỏi vào, chọn component “Advanced / Manual Select Question Block”.
+3. Nhập tên Library, lọc câu hỏi theo tag và chọn đích danh các câu hỏi đưa vào đề thi. Có thể bật option 'Xáo trộn thứ tự câu hỏi' để ngẫu nhiên thứ tự hiển thị.
+3.14.10. Chọn ngẫu nhiên các câu hỏi theo “tag” từ Library vào đề thi
+Hỗ trợ khai báo nhiều cặp (tag - số lượng) để sinh đề ngẫu nhiên từ Library:
+1. Khai báo "randome_xblock_v2" vào Advanced Module List trong Studio Settings.
+2. Trong Unit đề thi, chọn khối “Advanced / Randomized Content Block With Condition V2”.
+3. Chọn Library, thiết lập các cặp Tag và Số lượng câu hỏi tương ứng sẽ lấy ngẫu nhiên từ Library cho từng đề thi.
+3.14.11. Tạo đề thi ngẫu nhiên hoàn toàn từ Library
+Phương pháp đơn giản và nhanh nhất để tạo đề thi từ Library là lấy ngẫu nhiên hoàn toàn một số câu hỏi từ Library mà không chọn tag nào, chỉ khai báo tổng số lượng câu hỏi cần rút từ Library.
+3.14.12. Xác định câu hỏi trong Lib từ câu hỏi trong đề thi
+Hệ thống cho phép tra cứu mã ID câu hỏi trong đề thi để xác định và đối chiếu chính xác vị trí câu hỏi gốc nằm trong Library.
+3.14.13. Kiểm soát phiên bản Library, đề thi và đề thi phát hành cho người thi
+Nếu Library có phiên bản nội dung mới hơn đề thi trong khóa học, khi vào đề thi trong Studio sẽ xuất hiện thông báo cho phép giáo viên thực hiện Cập nhật (Update) nội dung mới từ Library vào đề thi.
+3.14.14. Thiết lập các thông số điểm câu hỏi và số lần trả lời tối đa
+Cấu hình điểm số (Problem Weight) và số lần thử (Maximum Attempts) áp dụng chung cho các câu hỏi rút ra từ Library vào đề thi.
+3.14.15. Một số lưu ý khi sử dụng Library cho question bank
+Luôn kiểm tra kỹ số lượng câu hỏi sau khi Import (chế độ Expand vs Replace), kiểm tra các link hình ảnh công khai và đảm bảo đã cấp quyền truy cập Library cho tất cả giáo viên tham gia phụ trách môn học.

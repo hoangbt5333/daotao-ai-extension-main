@@ -1,0 +1,21 @@
+de0
+Câu 1: Trong đáp án có ký tự ! và @ thì nội dung được giữ thế nào?
+(x) Dùng ! và @ như ký tự thông thường
+( ) Xóa mọi ký tự đặc biệt
+
+Câu 2: Kết quả 2 + 2 là bao nhiêu?
+(!x) 4
+( ) 5
+
+Câu 3: Tag tiếng Việt có dấu được viết ra sao?
+(x) Giữ nguyên tiếng Việt
+( ) Chuyển thành ASCII
+
+de1
+Câu 4: Dấu @ trong câu trả lời là gì?
+( ) Ký hiệu không hợp lệ
+(x) Một ký tự nội dung
+
+Câu 5: Có thể có nhiều tag trên một câu không?
+(x) Có, nếu định dạng hỗ trợ
+( ) Không
