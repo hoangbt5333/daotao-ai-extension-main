@@ -1,26 +1,16 @@
-import ast
-import re
 from pathlib import Path
+import sys
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "backend" / "app" / "api" / "v1" / "endpoints" / "questions.py"
-TREE = ast.parse(SOURCE.read_text(encoding="utf-8"))
-NAMES = {
-    "_parse_group_tag_marker",
-    "_merge_question_tags",
-    "parse_questions_from_text",
-    "parse_multiple_select_questions_from_text",
-}
-PARSER_AST = ast.Module(
-    body=[node for node in TREE.body if isinstance(node, ast.FunctionDef) and node.name in NAMES],
-    type_ignores=[],
+BACKEND = Path(__file__).resolve().parents[1]
+ROOT = BACKEND.parent
+sys.path.insert(0, str(BACKEND))
+
+from app.api.v1.endpoints.questions import (
+    parse_multiple_select_questions_from_text,
+    parse_questions_from_text,
 )
-PARSER_NAMESPACE = {"re": re}
-exec(compile(PARSER_AST, str(SOURCE), "exec"), PARSER_NAMESPACE)
-parse_questions_from_text = PARSER_NAMESPACE["parse_questions_from_text"]
-parse_multiple_select_questions_from_text = PARSER_NAMESPACE["parse_multiple_select_questions_from_text"]
 
 
 @pytest.fixture
@@ -97,14 +87,59 @@ Question with combined tags?
 
 
 def test_group_tag_parser_accepts_special_ascii_characters():
-    text = """@tag: alpha.beta, c++
+    text = """@tag: alpha.beta, c++, topic/name & review
 Question with special tags?
 (x) Correct
 ( ) Wrong"""
 
     questions = parse_questions_from_text(text, parse_group_tags=True)
 
-    assert questions[0]["tags"] == ["alpha.beta", "c++"]
+    assert questions[0]["tags"] == ["alpha.beta", "c++", "topic/name & review"]
+
+
+def test_group_tag_parser_accepts_vietnamese_diacritics():
+    text = """@tag: Ôn tập, Bài kiểm tra
+Câu hỏi có tag tiếng Việt?
+(x) Đúng
+( ) Sai"""
+
+    questions = parse_questions_from_text(text, parse_group_tags=True)
+
+    assert questions[0]["tags"] == ["Ôn tập", "Bài kiểm tra"]
+
+
+def test_group_marker_at_start_of_input():
+    text = """@tag: first-group
+Question?
+(x) Correct
+( ) Wrong"""
+
+    questions = parse_questions_from_text(text, parse_group_tags=True)
+
+    assert questions[0]["tags"] == ["first-group"]
+
+
+def test_consecutive_group_markers_use_the_last_marker():
+    text = """@tag: ignored
+@tag: active
+Question?
+(x) Correct
+( ) Wrong"""
+
+    questions = parse_questions_from_text(text, parse_group_tags=True)
+
+    assert questions[0]["tags"] == ["active"]
+
+
+def test_empty_group_marker_at_start_produces_no_group_tags():
+    text = """@tag:
+Question?
+(x) Correct
+( ) Wrong"""
+
+    questions = parse_questions_from_text(text, parse_group_tags=True)
+
+    assert questions[0]["tags"] == []
 
 
 def test_group_marker_is_ignored_by_default_for_llm_fallback_parser():
