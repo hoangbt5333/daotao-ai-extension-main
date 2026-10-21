@@ -1,15 +1,26 @@
-import sys
+import ast
+import re
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "backend"))
-
-from app.api.v1.endpoints.questions import (
-    parse_multiple_select_questions_from_text,
-    parse_questions_from_text,
+SOURCE = ROOT / "backend" / "app" / "api" / "v1" / "endpoints" / "questions.py"
+TREE = ast.parse(SOURCE.read_text(encoding="utf-8"))
+NAMES = {
+    "_parse_group_tag_marker",
+    "_merge_question_tags",
+    "parse_questions_from_text",
+    "parse_multiple_select_questions_from_text",
+}
+PARSER_AST = ast.Module(
+    body=[node for node in TREE.body if isinstance(node, ast.FunctionDef) and node.name in NAMES],
+    type_ignores=[],
 )
+PARSER_NAMESPACE = {"re": re}
+exec(compile(PARSER_AST, str(SOURCE), "exec"), PARSER_NAMESPACE)
+parse_questions_from_text = PARSER_NAMESPACE["parse_questions_from_text"]
+parse_multiple_select_questions_from_text = PARSER_NAMESPACE["parse_multiple_select_questions_from_text"]
 
 
 @pytest.fixture
@@ -31,7 +42,7 @@ Question three?
 (x) Correct
 ( ) Wrong"""
 
-    questions = parse_questions_from_text(text)
+    questions = parse_questions_from_text(text, parse_group_tags=True)
 
     assert [q["tags"] for q in questions] == [
         ["alpha", "beta"],
@@ -50,7 +61,7 @@ Question untagged?
 (x) Correct
 ( ) Wrong"""
 
-    questions = parse_questions_from_text(text)
+    questions = parse_questions_from_text(text, parse_group_tags=True)
 
     assert [q["tags"] for q in questions] == [["alpha"], []]
 
@@ -80,7 +91,7 @@ Question with combined tags?
 (x) Correct
 ( ) Wrong"""
 
-    questions = parse_questions_from_text(text, ["shared", "ui-tag"])
+    questions = parse_questions_from_text(text, ["shared", "ui-tag"], parse_group_tags=True)
 
     assert questions[0]["tags"] == ["de0", "alpha", "beta", "shared", "ui-tag"]
 
@@ -91,9 +102,21 @@ Question with special tags?
 (x) Correct
 ( ) Wrong"""
 
-    questions = parse_questions_from_text(text)
+    questions = parse_questions_from_text(text, parse_group_tags=True)
 
     assert questions[0]["tags"] == ["alpha.beta", "c++"]
+
+
+def test_group_marker_is_ignored_by_default_for_llm_fallback_parser():
+    text = """@tag: alpha
+Question?
+(x) Correct
+( ) Wrong"""
+
+    questions = parse_questions_from_text(text)
+
+    assert len(questions) == 1
+    assert questions[0]["tags"] == []
 
 
 def test_group_tags_work_with_multiple_select_custom_parser():
@@ -109,7 +132,7 @@ Question three?
 [x] Correct
 [ ] Wrong"""
 
-    questions = parse_multiple_select_questions_from_text(text, ["shared"])
+    questions = parse_multiple_select_questions_from_text(text, ["shared"], parse_group_tags=True)
 
     assert [q["tags"] for q in questions] == [
         ["alpha", "beta", "shared"],
@@ -118,12 +141,10 @@ Question three?
     ]
 
 
-def test_five_question_sample_retains_legacy_group_tags(basic_questions):
-    assert len(basic_questions) == 5
+def test_existing_sample_retains_legacy_group_tags(basic_questions):
+    assert len(basic_questions) == 3
     assert [q["tags"] for q in basic_questions] == [
         ["de0"],
         ["de0"],
-        ["de0"],
-        ["de1"],
         ["de1"],
     ]
