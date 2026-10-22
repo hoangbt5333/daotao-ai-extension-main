@@ -89,12 +89,28 @@ Provider prompts (`backend/app/services/llm/providers/{openai,gemini,deepseek}.p
 - Nên xác minh/cập nhật cấu trúc XML và mapping timestamp→problem trong exporter đang chạy, sau khi đối chiếu mẫu `invideoquiz_v2` hợp lệ của môi trường daotao.ai/Open edX. Có logic timemap trong mã cũ `backend/code_cu/video_quiz_exporter.py` (hàm `create_video_quiz_structure()` và `create_video_quiz_xml_for_video_quiz()`), nhưng đó không phải exporter mới trong `backend/app/services/export/`; không nên coi là implementation hiện hành.
 - `backend/app/services/export/video_quiz.py` hiện sinh `problem` và một file `problem` điều khiển quiz. Quan hệ component, loại XBlock chính xác, định dạng timemap và cách import tương thích `invideoquiz_v2` **chưa xác nhận được** chỉ từ code hiện hành. File `docs/huong_dan_daotao_ai_trich_xuat.docx` cần được đọc/đối chiếu thủ công nếu có quy cách đó; tìm kiếm text trong repo không cho thấy tài liệu `invideoquiz_v2` riêng.
 
+## Kết quả chạy thử
+
+### Đã chạy
+
+- Đã đọc `ARCHITECTURE.md`, `CLAUDE.md`, `docs/huong_dan_daotao_ai.txt` và mã trong `backend/app/`. Không có `docs/invideoquiz_v2.md`; `docs/huong_dan_daotao_ai.txt` là tài liệu hiện có với hướng dẫn video quiz và Library.
+- Đã tạo hai fixture không chứa dữ liệu thật: `samples/q_basic.txt` (3 câu radio, có `de0`, `de1`, marker `(!)`, `(@)`, `(!x)`) và `samples/q_multi.txt` (2 câu multiple-select, marker `[x]`/`[ ]`).
+- Đã thử khởi chạy `uvicorn app.main:app --port 8000` từ backend; shell báo `uvicorn: command not found`. Thử `python -m uvicorn app.main:app --port 8000` cũng thất bại với `No module named uvicorn`. Kiểm tra `http://127.0.0.1:8000/health` nhận `ConnectionRefusedError`; server không chạy.
+- Vì server không chạy, chưa POST được fixture lên `/api/v1/questions/process` hoặc `/api/v1/export/library`; không có response JSON hay `problem/*.xml` thật để trích dẫn. Các câu trả lời về XML dưới đây được đánh dấu là suy đoán từ code, không phải kết quả chạy.
+- Đã chạy `cd backend && pytest`: exit code 2, thu thập test thất bại tại `backend/code_cu/test_library_export.py` vì `ModuleNotFoundError: No module named 'lxml'` (Python 3.15.0, pytest 9.1.1). Không có test nào được thực thi. Test collection được nêu trên không import `backend/app/`; `backend/test_parser.py` cũng không import `app/` và tên file không khớp pattern mặc định `test_*.py`/`*_test.py`, nên không được thu thập. Không tìm thấy test nào trong backend thực sự import code từ `app/` trong lần chạy này.
+
+### Suy đoán (chưa xác nhận bằng API/XML)
+
+- `backend/app/services/export/library.py::_create_problem_xml_for_library()` tạo `<problem ... tags="...">`, nên tags có vẻ nằm trên thuộc tính `tags` của phần tử gốc `<problem>`. Với `multiple_choice`, code luôn đặt `shuffle="true"` trên `<choicegroup>`; không thấy code dùng marker `(!)` hoặc `(@)` để sinh `fixed="true"`.
+- Parser `backend/app/api/v1/endpoints/questions.py::parse_questions_from_text()` chỉ gán đáp án đúng khi nhận diện chuỗi `(!x)` hoặc `(x)`. Marker `(!)` không được dùng để chọn đáp án; `(@)` cũng không được diễn giải thành `fixed`. Không thể kết luận XML cuối cùng của API khi chưa chạy được endpoint.
+- Ở mode custom, `user_tags` chỉ được thêm vào câu radio như tag không bắt đầu bằng `de` khi parser xử lý câu. Parser multiple-select hiện không nhận `tags_list` để thêm các tag này. `apply_user_tags_to_questions()` chỉ thêm tag thường khi có `tags_explanation`; do đó khả năng kết hợp user tags với `de0`/`de1` khác nhau theo loại câu và cần xác minh lại khi môi trường có dependency.
+
 ## 7. Test và đề xuất kiểm thử nhỏ nhất
 
 - Có pytest trong `backend/requirements.txt`, nhưng danh sách file hiện thấy không có test suite rõ cho `backend/app/`. Có script `backend/test_parser.py::test_parse()` tự in kết quả, nhưng định nghĩa parser bên trong là bản minh họa riêng, không import `app/api/v1/endpoints/questions.py`; do đó không phải test tự động đáng tin cậy cho parser production.
 - Có `backend/code_cu/test_library_export.py`, nhưng tên/vị trí cho thấy nó thuộc mã cũ; cần kiểm tra import trước khi dùng làm test của `app/`. Các file `test_exact_matching.py`, `test_mapping_logic.py`, `test_smart_matching.py` ở root chưa được rà soát nội dung sâu; chưa xác minh được chúng chạy bằng pytest hay còn phù hợp.
 - Lệnh tổng quát được `backend/README.md` ghi là `pytest` chạy từ `backend`, nhưng đây mới là hướng dẫn; chưa xác nhận toàn suite hiện chạy thành công. Frontend không khai báo script test trong `frontend/package.json`.
-- Không tìm thấy thư mục `samples/`, vì vậy hiện không thể đề xuất đường dẫn fixture cụ thể bên trong đó. Kiểm thử nhỏ nhất sau khi bổ sung/chọn file mẫu đã được phép dùng:
+- Đã tạo fixture ẩn danh `samples/q_basic.txt` và `samples/q_multi.txt`; hiện có thể dùng chúng cho kiểm thử nhỏ nhất khi dependencies backend sẵn sàng:
   1. Dùng một file câu hỏi đã ẩn danh/không có dữ liệu sinh viên thật, với hai câu, đáp án marker `(x)`/`(!x)` và marker `de0` rồi `de1`; POST `/api/v1/questions/process` ở custom mode, xác nhận số câu, đáp án đúng và tag từng câu.
   2. Gửi JSON kết quả đến `/api/v1/export/library`, mở tar.gz và kiểm tra mỗi `library/problem/*.xml` có tags đúng.
   3. Với outline, dùng CSV/XLSX nhỏ có header bắt buộc và một hàng PDF, một hàng Youtube, một hàng kết hợp; gọi `/api/v1/outline/import-excel`, kiểm tra type/structure; sau đó export và kiểm tra tar.gz có XML course hierarchy cùng static PDF tương ứng.
@@ -119,7 +135,7 @@ Provider prompts (`backend/app/services/llm/providers/{openai,gemini,deepseek}.p
 - `backend/code_cu/` có vẻ là mã cũ vì tên thư mục và cấu trúc song song; chưa có bằng chứng rằng không có script/deploy nào đang chạy nó.
 - Mô hình component chính xác của `invideoquiz_v2`, tên XBlock cần đăng ký, cấu trúc timemap và schema XML phụ thuộc phiên bản/config Open edX của daotao.ai; phải lấy gói mẫu đã import thành công hoặc tài liệu được giảng viên xác nhận.
 - Không thể xác định từ repo liệu metadata “tag” có yêu cầu dùng cho lọc thư viện, phân loại đề hay mục đích nghiệp vụ nào khác; điều này ảnh hưởng lựa chọn UX/tag convention.
-- Chưa chạy app/test trong quá trình khảo sát; các lệnh chạy là theo manifest/README, chưa xác nhận trên môi trường hiện tại.
+- App chưa khởi động được do thiếu Uvicorn; `pytest` chưa chạy test do thiếu `lxml` khi collection. Kết quả thử và lỗi môi trường được ghi tại mục “Kết quả chạy thử”.
 
 ## Câu hỏi cần hỏi giảng viên (tối đa 5)
 
