@@ -63,11 +63,22 @@ export default function QuestionBankTool() {
   const [editImage, setEditImage] = useState<File | null>(null);
   const [editTags, setEditTags] = useState<string[]>([]);
   const [editTagInput, setEditTagInput] = useState<string>("");
-  // Thay thế parseMode bằng 2 lựa chọn: 'llm' | 'multiple_select'
-  const [parseMode, setParseMode] = useState<'llm' | 'multiple_select'>('llm');
+  // parseMode: 'llm' | 'custom_single' | 'multiple_select'
+  const [parseMode, setParseMode] = useState<'llm' | 'custom_single' | 'multiple_select'>('llm');
   const [userFormat, setUserFormat] = useState('');
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [exportQuestionType, setExportQuestionType] = useState<'multiple_choice' | 'multiple_select'>('multiple_choice');
+
+  // Khi thay đổi parseMode, tự động sync exportQuestionType cho phù hợp
+  const handleParseModeChange = (newMode: 'llm' | 'custom_single' | 'multiple_select') => {
+    setParseMode(newMode);
+    if (newMode === 'multiple_select') {
+      setExportQuestionType('multiple_select');
+    } else {
+      // LLM hoặc custom_single đều mặc định export multiple_choice
+      setExportQuestionType('multiple_choice');
+    }
+  };
 
   const BACKEND = "http://localhost:8000";
 
@@ -80,9 +91,19 @@ export default function QuestionBankTool() {
       formData.append("questions_text", questionsText);
       formData.append("user_tags", JSON.stringify(userTags));
       formData.append("tags_explanation", tagsExplanation);
-      formData.append("mode", parseMode === 'llm' ? 'llm' : 'custom');
-      if (parseMode === 'multiple_select') {
-        formData.append("user_format", "multiple_select"); // báo backend dùng parser multiple_select
+      // Gửi payload theo chế độ được chọn
+      if (parseMode === 'llm') {
+        // LLM: để AI phân tích, không gửi user_format
+        formData.append("mode", "llm");
+      } else if (parseMode === 'custom_single') {
+        // Custom parser — một đáp án đúng: parse_questions_from_text()
+        // hỗ trợ (x)/(!x)/( )/(!), de0/de1, @tag:
+        formData.append("mode", "custom");
+        // Không gửi user_format → backend dùng parse_questions_from_text()
+      } else if (parseMode === 'multiple_select') {
+        // Multiple Selection — nhiều đáp án đúng: parse_multiple_select_questions_from_text()
+        formData.append("mode", "custom");
+        formData.append("user_format", "multiple_select");
       }
       const res = await fetch(`${BACKEND}/api/v1/questions/process`, {
         method: "POST",
@@ -198,23 +219,53 @@ export default function QuestionBankTool() {
           <RadioGroup
             row
             value={parseMode}
-            onChange={e => setParseMode(e.target.value as 'llm' | 'multiple_select')}
+            onChange={e => handleParseModeChange(e.target.value as 'llm' | 'custom_single' | 'multiple_select')}
             sx={{ mb: 2 }}
           >
             <FormControlLabel value="llm" control={<Radio />} label="Để AI tự nhận diện (LLM)" />
-            <FormControlLabel value="multiple_select" control={<Radio />} label="Multiple Selection (nhiều đáp án đúng)" />
+            <FormControlLabel value="custom_single" control={<Radio />} label="Custom parser — một đáp án đúng" />
+            <FormControlLabel value="multiple_select" control={<Radio />} label="Multiple Selection — nhiều đáp án đúng" />
           </RadioGroup>
+          {parseMode === 'custom_single' && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              <strong>Hướng dẫn nhập — Custom parser (một đáp án đúng):</strong><br/>
+              <pre style={{ margin: '8px 0', fontFamily: 'monospace', fontSize: '0.85em', background: '#f5f5f5', padding: '8px', borderRadius: '4px' }}>
+{`de0
+Câu hỏi số 1?
+(!) Phương án cố định (không xáo trộn)
+( ) Phương án sai
+(x) Đáp án đúng
+( ) Phương án sai khác
+
+@tag: Chương 1, Tuần 1
+Câu hỏi số 2 với tag nhóm?
+(!x) Đáp án đúng và cố định
+( ) Phương án sai
+
+de1
+Câu hỏi số 3 thuộc đề 1?
+( ) Phương án sai
+(x) Đáp án đúng`}
+              </pre>
+              <strong>Ký hiệu:</strong><br/>
+              • <code>(x)</code> — đáp án đúng &nbsp;|&nbsp; <code>(!x)</code> — đáp án đúng và cố định (không xáo trộn)<br/>
+              • <code>( )</code> — đáp án sai &nbsp;|&nbsp; <code>(!)</code> — đáp án sai và cố định (không xáo trộn)<br/>
+              • <code>de0</code>, <code>de1</code>… — nhãn đề thi, áp dụng cho tất cả câu tiếp theo cho đến khi gặp nhãn khác<br/>
+              • <code>@tag: tag1, tag2</code> — tag nhóm cho câu ngay sau, ghi trước câu hỏi
+            </Alert>
+          )}
           {parseMode === 'multiple_select' && (
             <Alert severity="info" sx={{ mb: 2 }}>
-              <strong>Hướng dẫn nhập:</strong><br/>
-              <pre style={{margin:0}}>
-Câu hỏi?
+              <strong>Hướng dẫn nhập — Multiple Selection (nhiều đáp án đúng):</strong><br/>
+              <pre style={{ margin: '8px 0', fontFamily: 'monospace', fontSize: '0.85em', background: '#f5f5f5', padding: '8px', borderRadius: '4px' }}>
+{`de0
+Câu hỏi có nhiều đáp án đúng?
 [x] Đáp án đúng 1
 [x] Đáp án đúng 2
 [ ] Đáp án sai 1
-[ ] Đáp án sai 2
+[ ] Đáp án sai 2`}
               </pre>
-              Có thể thêm tag de0, de1... ở đầu mỗi block nếu muốn.<br/>
+              Có thể thêm <code>de0</code>, <code>de1</code>… ở đầu mỗi block để gán nhãn đề thi.<br/>
               <strong>Lưu ý:</strong> Mỗi block bắt đầu bằng câu hỏi, các dòng tiếp theo là đáp án.
             </Alert>
           )}
@@ -517,14 +568,23 @@ Câu hỏi?
               <FormControlLabel value="multiple_select" control={<Radio />} label="Multiple Selection (nhiều đáp án đúng)" />
             </RadioGroup>
           </Box>
-          <Button
-            variant="contained"
-            onClick={handleExportLibrary}
-            disabled={loading}
-            startIcon={loading ? <CircularProgress size={20} /> : <UploadIcon />}
-          >
-            {loading ? "Đang export..." : "Export Library"}
-          </Button>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <Button
+              variant="outlined"
+              onClick={() => setActiveStep(0)}
+              disabled={loading}
+            >
+              ← Quay lại Bước 1
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handleExportLibrary}
+              disabled={loading}
+              startIcon={loading ? <CircularProgress size={20} /> : <UploadIcon />}
+            >
+              {loading ? "Đang export..." : "Export Library"}
+            </Button>
+          </Box>
         </Paper>
       )}
       {activeStep === 2 && (
@@ -550,6 +610,14 @@ Câu hỏi?
               </Typography>
             </>
           )}
+          <Box sx={{ mt: 3 }}>
+            <Button
+              variant="outlined"
+              onClick={() => setActiveStep(1)}
+            >
+              ← Quay lại Bước 2
+            </Button>
+          </Box>
       </Paper>
       )}
     </Box>
