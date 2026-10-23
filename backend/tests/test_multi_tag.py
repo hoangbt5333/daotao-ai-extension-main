@@ -15,7 +15,27 @@ from app.api.v1.endpoints.questions import (
 
 @pytest.fixture
 def basic_questions():
-    text = (ROOT / "samples" / "q_basic.txt").read_text(encoding="utf-8")
+    sample_file = ROOT / "samples" / "q_basic.txt"
+    if sample_file.exists():
+        text = sample_file.read_text(encoding="utf-8")
+    else:
+        text = """de0
+Mẫu radio với marker đầu đáp án (!)?
+(!) Phương án đầu tiên
+( ) Phương án thứ hai
+(x) Phương án thứ ba
+
+Câu hỏi có ký hiệu (@) trong nội dung?
+(@) Nội dung đánh dấu @
+( ) Phương án khác
+(x) Đáp án đúng
+
+de1
+Câu hỏi có marker (!x) ở đáp án đúng?
+(!x) Đáp án đúng
+( ) Phương án sai
+(x) Một đáp án đúng khác
+"""
     return parse_questions_from_text(text)
 
 
