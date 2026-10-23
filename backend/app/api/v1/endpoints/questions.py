@@ -452,7 +452,7 @@ def _merge_question_tags(*tag_groups):
 
 
 def parse_questions_from_text(questions_text, tags_list=None, parse_group_tags=False):
-    """Parser for new format: Question with (!), ( ), (x), (!x) markers"""
+    """Parser for Multiple Choice format: Question with (!), ( ), (x), (!x), (@), (@x) markers"""
     print(f"DEBUG: parse_questions_from_text called with tags_list: {tags_list}")
     questions = []
 
@@ -462,6 +462,8 @@ def parse_questions_from_text(questions_text, tags_list=None, parse_group_tags=F
     current_question = None
     current_choices = []
     current_correct_answer = None
+    current_fixed_choices = []
+    current_shuffle = True
     current_de_tag = None
     current_group_tags = []
     question_de_tag = None
@@ -470,7 +472,6 @@ def parse_questions_from_text(questions_text, tags_list=None, parse_group_tags=F
 
     # Map de tags based on position
     de_tags = ['de0', 'de1', 'de2', 'de3', 'de4', 'de5', 'de6']
-    de_index = 0
 
     for line in lines:
         group_tag_marker = _parse_group_tag_marker(line) if parse_group_tags else None
@@ -484,8 +485,8 @@ def parse_questions_from_text(questions_text, tags_list=None, parse_group_tags=F
             print(f"DEBUG: Found de tag: {current_de_tag}")
             continue
             
-        # Check if line starts with marker pattern
-        marker_match = re.match(r'^[\(\)!x\s]+', line)
+        # Check if line starts with choice marker pattern: e.g. ( ), (x), (!), (!x), (@), (@x), (x@)
+        marker_match = re.match(r'^\s*\(([!x@\s]*)\)\s*(.*)', line)
         
         if not marker_match:
             # This is a question line (no markers)
@@ -502,12 +503,14 @@ def parse_questions_from_text(questions_text, tags_list=None, parse_group_tags=F
                     "type": "multiple_choice",
                     "choices": current_choices,
                     "correct_answers": [current_correct_answer],
+                    "fixed_choices": current_fixed_choices,
+                    "shuffle": current_shuffle,
                     "tags": question_tags,
                     "topic": "",
                     "is_valid": True,
                     "errors": []
                 })
-                print(f"DEBUG: Added question with tags: {question_tags}")
+                print(f"DEBUG: Added question with tags: {question_tags}, fixed_choices: {current_fixed_choices}")
             
             # Start new question
             current_question = line.strip()
@@ -515,20 +518,28 @@ def parse_questions_from_text(questions_text, tags_list=None, parse_group_tags=F
             question_group_tags = current_group_tags
             current_choices = []
             current_correct_answer = None
+            current_fixed_choices = []
+            current_shuffle = True
         else:
             # This is a choice line with markers
-            # Extract the choice text (remove the marker)
-            choice_text = re.sub(r'^[\(\)!x\s]+', '', line).strip()
-            if choice_text:  # Only add if there's actual text
-                current_choices.append(choice_text)
-                
-                # Check if this is the correct answer
-                # (!x) = đáp án đầu tiên VÀ đúng
-                # (x) = đáp án đúng (không phải đầu tiên)
-                if '(!x)' in line:
-                    current_correct_answer = len(current_choices) - 1  # 0-based index
-                elif '(x)' in line:
-                    current_correct_answer = len(current_choices) - 1  # 0-based index
+            marker_str = marker_match.group(1).strip()
+            choice_text = marker_match.group(2).strip()
+            
+            choice_idx = len(current_choices)
+            current_choices.append(choice_text)
+            
+            # Check if this choice is the correct answer (contains 'x')
+            if 'x' in marker_str:
+                current_correct_answer = choice_idx
+            
+            # Check if this choice should be fixed (contains '@' or '!' when not the first choice)
+            if '@' in marker_str:
+                current_fixed_choices.append(choice_idx)
+            elif '!' in marker_str:
+                if choice_idx == 0:
+                    current_shuffle = True  # '!' at first line explicitly confirms shuffle in Open edX
+                else:
+                    current_fixed_choices.append(choice_idx)
     
     # Don't forget the last question
     if current_question and current_choices and current_correct_answer is not None:
@@ -543,12 +554,14 @@ def parse_questions_from_text(questions_text, tags_list=None, parse_group_tags=F
             "type": "multiple_choice",
             "choices": current_choices,
             "correct_answers": [current_correct_answer],
+            "fixed_choices": current_fixed_choices,
+            "shuffle": current_shuffle,
             "tags": question_tags,
             "topic": "",
             "is_valid": True,
             "errors": []
         })
-        print(f"DEBUG: Added last question with tags: {question_tags}")
+        print(f"DEBUG: Added last question with tags: {question_tags}, fixed_choices: {current_fixed_choices}")
     
     return questions
 
