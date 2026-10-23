@@ -270,7 +270,7 @@ async def process_questions(
                 print(f"DEBUG: LLM result type: {type(result)}")
                 print(f"DEBUG: LLM result: {result}")
                 print(f"DEBUG: Using tags_list for fallback: {tags_list}")
-                questions = parse_questions_from_text(questions_text, tags_list)
+                questions = parse_questions_from_text(questions_text, tags_list, parse_group_tags=(mode == 'custom'))
                 mode = 'custom'
                 message = "Questions processed successfully using custom parser (LLM fallback)"
             else:
@@ -333,13 +333,13 @@ async def process_questions(
                             if tag not in llm_tags:
                                 llm_tags.append(tag)
                         llm_q['tags'] = llm_tags
-                
+
                 message = "Questions processed successfully using LLM"
-            
+
             # Apply user tags based on tags_explanation
             if tags_list and tags_explanation:
                 questions = apply_user_tags_to_questions(questions, tags_list, tags_explanation)
-            
+
             # Assign tags if missing and map answer -> correct_answers for frontend
             for q in questions:
                 # Only assign non-de user tags if no tags exist
@@ -356,19 +356,20 @@ async def process_questions(
                             q['tags'].append(tag)
                 if not q.get('correct_answers') and q.get('answer') is not None:
                     q['correct_answers'] = q['answer']
-            
+
             return QuestionProcessingResponse(
                 success=True,
                 questions=questions,
                 mode=mode,
                 message=message
             )
+
         else:
             # Custom parser according to user format (if provided)
             if user_format == "multiple_select":
-                questions = parse_multiple_select_questions_from_text(questions_text, tags_list)
+                questions = parse_multiple_select_questions_from_text(questions_text, tags_list, parse_group_tags=True)
             else:
-                questions = parse_questions_from_text(questions_text, tags_list)
+                questions = parse_questions_from_text(questions_text, tags_list, parse_group_tags=True)
             
             # Apply user tags based on tags_explanation
             if tags_list and tags_explanation:
@@ -376,9 +377,7 @@ async def process_questions(
             
             # Ensure all questions have tags
             for q in questions:
-                if not q.get('tags') or not isinstance(q['tags'], list) or len(q['tags']) == 0:
-                    non_de_user_tags = [tag for tag in tags_list if not tag.startswith('de')]
-                    q['tags'] = non_de_user_tags
+                q['tags'] = _merge_question_tags(q.get('tags', [])) if isinstance(q.get('tags'), list) else []
             
             return QuestionProcessingResponse(
                 success=True,
@@ -437,104 +436,137 @@ async def get_questions_from_library(
         )
 
 
-def parse_questions_from_text(questions_text, tags_list=None):
-    """Parser for new format: Question with (!), ( ), (x), (!x) markers"""
+def _parse_group_tag_marker(line):
+    if not line.startswith('@tag:'):
+        return None
+    return [tag.strip() for tag in line[len('@tag:'):].split(',') if tag.strip()]
+
+
+def _merge_question_tags(*tag_groups):
+    tags = []
+    for group in tag_groups:
+        for tag in group:
+            if tag and tag not in tags:
+                tags.append(tag)
+    return tags
+
+
+def parse_questions_from_text(questions_text, tags_list=None, parse_group_tags=False):
+    """Parser for Multiple Choice format: Question with (!), ( ), (x), (!x), (@), (@x) markers"""
     print(f"DEBUG: parse_questions_from_text called with tags_list: {tags_list}")
     questions = []
-    
+
     # Split into lines and process
     lines = [l.strip() for l in questions_text.strip().split('\n') if l.strip()]
-    
+
     current_question = None
     current_choices = []
     current_correct_answer = None
+    current_fixed_choices = []
+    current_shuffle = True
     current_de_tag = None
-    
+    current_group_tags = []
+    question_de_tag = None
+    question_group_tags = []
+    user_tags = [tag for tag in (tags_list or []) if not tag.startswith('de')]
+
     # Map de tags based on position
     de_tags = ['de0', 'de1', 'de2', 'de3', 'de4', 'de5', 'de6']
-    de_index = 0
-    
+
     for line in lines:
+        group_tag_marker = _parse_group_tag_marker(line) if parse_group_tags else None
+        if group_tag_marker is not None:
+            current_group_tags = group_tag_marker
+            continue
+
         # Check if line starts with de tag
         if line.startswith('de') and any(line.startswith(tag) for tag in de_tags):
             current_de_tag = line
             print(f"DEBUG: Found de tag: {current_de_tag}")
             continue
             
-        # Check if line starts with marker pattern
-        marker_match = re.match(r'^[\(\)!x\s]+', line)
+        # Check if line starts with choice marker pattern: e.g. ( ), (x), (!), (!x), (@), (@x), (x@)
+        marker_match = re.match(r'^\s*\(([!x@\s]*)\)\s*(.*)', line)
         
         if not marker_match:
             # This is a question line (no markers)
             # If we have a previous question, save it
             if current_question and current_choices and current_correct_answer is not None:
-                # Determine tags for this question
-                question_tags = []
-                if current_de_tag:
-                    question_tags.append(current_de_tag)
-                # Only add non-de user tags (like "Module 3-1 bai 1")
-                if tags_list:
-                    non_de_user_tags = [tag for tag in tags_list if not tag.startswith('de')]
-                    question_tags.extend(non_de_user_tags)
+                question_tags = _merge_question_tags(
+                    [question_de_tag] if question_de_tag else [],
+                    question_group_tags,
+                    user_tags,
+                )
                 
                 questions.append({
                     "question": current_question,
                     "type": "multiple_choice",
                     "choices": current_choices,
                     "correct_answers": [current_correct_answer],
+                    "fixed_choices": current_fixed_choices,
+                    "shuffle": current_shuffle,
                     "tags": question_tags,
                     "topic": "",
                     "is_valid": True,
                     "errors": []
                 })
-                print(f"DEBUG: Added question with tags: {question_tags}")
+                print(f"DEBUG: Added question with tags: {question_tags}, fixed_choices: {current_fixed_choices}")
             
             # Start new question
             current_question = line.strip()
+            question_de_tag = current_de_tag
+            question_group_tags = current_group_tags
             current_choices = []
             current_correct_answer = None
+            current_fixed_choices = []
+            current_shuffle = True
         else:
             # This is a choice line with markers
-            # Extract the choice text (remove the marker)
-            choice_text = re.sub(r'^[\(\)!x\s]+', '', line).strip()
-            if choice_text:  # Only add if there's actual text
-                current_choices.append(choice_text)
-                
-                # Check if this is the correct answer
-                # (!x) = đáp án đầu tiên VÀ đúng
-                # (x) = đáp án đúng (không phải đầu tiên)
-                if '(!x)' in line:
-                    current_correct_answer = len(current_choices) - 1  # 0-based index
-                elif '(x)' in line:
-                    current_correct_answer = len(current_choices) - 1  # 0-based index
+            marker_str = marker_match.group(1).strip()
+            choice_text = marker_match.group(2).strip()
+            
+            choice_idx = len(current_choices)
+            current_choices.append(choice_text)
+            
+            # Check if this choice is the correct answer (contains 'x')
+            if 'x' in marker_str:
+                current_correct_answer = choice_idx
+            
+            # Check if this choice should be fixed (contains '@' or '!' when not the first choice)
+            if '@' in marker_str:
+                current_fixed_choices.append(choice_idx)
+            elif '!' in marker_str:
+                if choice_idx == 0:
+                    current_shuffle = True  # '!' at first line explicitly confirms shuffle in Open edX
+                else:
+                    current_fixed_choices.append(choice_idx)
     
     # Don't forget the last question
     if current_question and current_choices and current_correct_answer is not None:
-        # Determine tags for this question
-        question_tags = []
-        if current_de_tag:
-            question_tags.append(current_de_tag)
-        # Only add non-de user tags (like "Module 3-1 bai 1")
-        if tags_list:
-            non_de_user_tags = [tag for tag in tags_list if not tag.startswith('de')]
-            question_tags.extend(non_de_user_tags)
-        
+        question_tags = _merge_question_tags(
+            [question_de_tag] if question_de_tag else [],
+            question_group_tags,
+            user_tags,
+        )
+
         questions.append({
             "question": current_question,
             "type": "multiple_choice",
             "choices": current_choices,
             "correct_answers": [current_correct_answer],
+            "fixed_choices": current_fixed_choices,
+            "shuffle": current_shuffle,
             "tags": question_tags,
             "topic": "",
             "is_valid": True,
             "errors": []
         })
-        print(f"DEBUG: Added last question with tags: {question_tags}")
+        print(f"DEBUG: Added last question with tags: {question_tags}, fixed_choices: {current_fixed_choices}")
     
     return questions
 
 
-def parse_multiple_select_questions_from_text(questions_text, tags_list=None):
+def parse_multiple_select_questions_from_text(questions_text, tags_list=None, parse_group_tags=False):
     """Parser for multiple selection format: [x]/[ ]"""
     questions = []
     lines = [l.strip() for l in questions_text.strip().split('\n') if l.strip()]
@@ -542,9 +574,18 @@ def parse_multiple_select_questions_from_text(questions_text, tags_list=None):
     current_choices = []
     current_correct_answers = []
     current_de_tag = None
+    current_group_tags = []
+    question_de_tag = None
+    question_group_tags = []
+    user_tags = [tag for tag in (tags_list or []) if not tag.startswith('de')]
     de_tags = ['de0', 'de1', 'de2', 'de3', 'de4', 'de5', 'de6']
     de_index = 0
     for line in lines:
+        group_tag_marker = _parse_group_tag_marker(line) if parse_group_tags else None
+        if group_tag_marker is not None:
+            current_group_tags = group_tag_marker
+            continue
+
         # Check if line starts with de tag
         if line.startswith('de') and any(line.startswith(tag) for tag in de_tags):
             current_de_tag = line
@@ -553,9 +594,11 @@ def parse_multiple_select_questions_from_text(questions_text, tags_list=None):
         if not (line.startswith('[x]') or line.startswith('[ ]')):
             # Nếu có câu hỏi trước đó thì lưu lại
             if current_question and current_choices:
-                question_tags = []
-                if current_de_tag:
-                    question_tags.append(current_de_tag)
+                question_tags = _merge_question_tags(
+                    [question_de_tag] if question_de_tag else [],
+                    question_group_tags,
+                    user_tags,
+                )
                 questions.append({
                     "question": current_question,
                     "type": "multiple_select",
@@ -568,6 +611,8 @@ def parse_multiple_select_questions_from_text(questions_text, tags_list=None):
                 })
             # Bắt đầu câu hỏi mới
             current_question = line.strip()
+            question_de_tag = current_de_tag
+            question_group_tags = current_group_tags
             current_choices = []
             current_correct_answers = []
         else:
@@ -580,9 +625,11 @@ def parse_multiple_select_questions_from_text(questions_text, tags_list=None):
                     current_correct_answers.append(len(current_choices) - 1)
     # Đừng quên câu hỏi cuối cùng
     if current_question and current_choices:
-        question_tags = []
-        if current_de_tag:
-            question_tags.append(current_de_tag)
+        question_tags = _merge_question_tags(
+            [question_de_tag] if question_de_tag else [],
+            question_group_tags,
+            user_tags,
+        )
         questions.append({
             "question": current_question,
             "type": "multiple_select",

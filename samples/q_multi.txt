@@ -1,0 +1,10 @@
+de0
+Câu nhiều lựa chọn một?
+[x] Đáp án đúng một
+[ ] Đáp án sai một
+[x] Đáp án đúng hai
+
+ de1
+Câu nhiều lựa chọn hai?
+[ ] Đáp án sai hai
+[x] Đáp án đúng ba

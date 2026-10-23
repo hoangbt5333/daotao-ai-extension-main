@@ -190,10 +190,14 @@ class LibraryExporter(Exporter):
             
             choices = question_data.get('choices', [])
             correct_answers = question_data.get('correct_answers', [])
+            fixed_choices = question_data.get('fixed_choices', [])
             
             for i, choice in enumerate(choices):
                 correct = "true" if i in correct_answers else "false"
-                c = etree.SubElement(cg, "choice", attrib={"correct": correct})
+                choice_attrib = {"correct": correct}
+                if i in fixed_choices:
+                    choice_attrib["fixed"] = "true"
+                c = etree.SubElement(cg, "choice", attrib=choice_attrib)
                 c.text = choice
         
         elif question_type == "multiple_select":
@@ -239,12 +243,30 @@ class LibraryExporter(Exporter):
             markdown_content = f"<p/>\n{question_text}\n=====\n>>Chọn 1 đáp án đúng<<\n"
             choices = question_data.get('choices', [])
             correct_answers = question_data.get('correct_answers', [])
+            fixed_choices = question_data.get('fixed_choices', [])
             
             for i, choice in enumerate(choices):
-                if i in correct_answers:
-                    markdown_content += f"(!x) {choice}. \n"
+                is_correct = (i in correct_answers)
+                is_fixed = (i in fixed_choices)
+                
+                if i == 0:
+                    # Dòng đầu tiên: Công tắc kích hoạt shuffle của Open edX
+                    if is_correct:
+                        markdown_content += f"(!x) {choice}\n"
+                    else:
+                        markdown_content += f"(!) {choice}\n"
                 else:
-                    markdown_content += f"() {choice}\n"
+                    # Các dòng từ thứ 2 trở đi
+                    if is_fixed:
+                        if is_correct:
+                            markdown_content += f"(@x) {choice}\n"
+                        else:
+                            markdown_content += f"(@) {choice}\n"
+                    else:
+                        if is_correct:
+                            markdown_content += f"(x) {choice}\n"
+                        else:
+                            markdown_content += f"() {choice}\n"
         
         elif question_type == "multiple_select":
             markdown_content = f"<p/>\n{question_text}\n=====\n>>Chọn tất cả đáp án đúng<<\n"

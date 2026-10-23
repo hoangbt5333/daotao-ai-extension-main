@@ -1,0 +1,16 @@
+de0
+Mẫu radio với marker đầu đáp án (!)?
+(!) Phương án đầu tiên
+( ) Phương án thứ hai
+(x) Phương án thứ ba
+
+Câu hỏi có ký hiệu (@) trong nội dung?
+(@) Nội dung đánh dấu @
+( ) Phương án khác
+(x) Đáp án đúng
+
+de1
+Câu hỏi có marker (!x) ở đáp án đúng?
+(!x) Đáp án đúng
+( ) Phương án sai
+(x) Một đáp án đúng khác
