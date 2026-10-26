@@ -32,16 +32,18 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import VideoFileIcon from '@mui/icons-material/VideoFile';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import DescriptionIcon from '@mui/icons-material/Description';
+import AudioFileIcon from '@mui/icons-material/AudioFile';
 import UploadIcon from '@mui/icons-material/Upload';
 
 // Outline data type
 interface OutlineUnit {
   title: string;
-  type?: 'video' | 'pdf' | 'docx' | 'text' | 'video_pdf';
+  type?: 'video' | 'pdf' | 'docx' | 'text' | 'video_pdf' | 'audio';
   file?: File | null;
   fileUrl?: string;
   video_url?: string; // For video and video_pdf types
   pdf_file?: string; // For video_pdf type
+  audio_file?: string; // For audio type
 }
 
 interface OutlineSubsection {
@@ -82,7 +84,7 @@ export default function EditableOutlineTree({
     unitIdx?: number, 
     value: string, 
     mode: 'edit'|'add',
-    unitType?: 'video' | 'pdf' | 'docx' | 'text' | 'video_pdf',
+    unitType?: 'video' | 'pdf' | 'docx' | 'text' | 'video_pdf' | 'audio',
     unitFile?: File | null,
     pdfFile?: File | null,
     videoUrl?: string
@@ -102,7 +104,7 @@ export default function EditableOutlineTree({
         value, 
         mode: 'edit',
         unitType: unit?.type || 'text',
-        unitFile: unit?.file || null,
+        unitFile: unit?.file || (unit?.audio_file ? new File([], unit.audio_file) : null),
         pdfFile: unit?.pdf_file ? new File([], unit.pdf_file) : null,
         videoUrl: unit?.video_url || ''
       });
@@ -156,6 +158,11 @@ export default function EditableOutlineTree({
       if (unitType === 'video_pdf' && pdfFile) {
         unitData.pdf_file = pdfFile.name;
       }
+
+      // Add audio_file for audio type
+      if (unitType === 'audio' && unitFile) {
+        unitData.audio_file = unitFile.name;
+      }
       
       if (mode === 'edit' && unitIdx !== undefined) {
         newData.outline[chapterIdx].subsections[subIdx].units[unitIdx] = {
@@ -173,6 +180,7 @@ export default function EditableOutlineTree({
     switch (type) {
       case 'video': return <VideoFileIcon fontSize="small" />;
       case 'pdf': return <PictureAsPdfIcon fontSize="small" />;
+      case 'audio': return <AudioFileIcon fontSize="small" />;
       case 'docx': return <DescriptionIcon fontSize="small" />;
       case 'video_pdf': return <VideoFileIcon fontSize="small" />;
       default: return null;
@@ -183,6 +191,7 @@ export default function EditableOutlineTree({
     switch (type) {
       case 'video': return 'Video';
       case 'pdf': return 'PDF';
+      case 'audio': return 'Audio (.mp3)';
       case 'docx': return 'DOCX';
       case 'video_pdf': return 'Video + PDF';
       default: return 'Text';
@@ -399,6 +408,7 @@ export default function EditableOutlineTree({
                   <MenuItem value="text">Text</MenuItem>
                   <MenuItem value="video">Video</MenuItem>
                   <MenuItem value="pdf">PDF</MenuItem>
+                  <MenuItem value="audio">Audio (.mp3)</MenuItem>
                   <MenuItem value="docx">DOCX</MenuItem>
                   <MenuItem value="video_pdf">Video + PDF</MenuItem>
                 </Select>
@@ -421,12 +431,13 @@ export default function EditableOutlineTree({
                 </Box>
               )}
               
-              {(editDialog.unitType === 'pdf' || editDialog.unitType === 'docx') && (
+              {(editDialog.unitType === 'pdf' || editDialog.unitType === 'docx' || editDialog.unitType === 'audio') && (
                 <Box sx={{ mb: 2 }}>
                   <input
                     type="file"
                     accept={
                       editDialog.unitType === 'pdf' ? '.pdf' :
+                      editDialog.unitType === 'audio' ? '.mp3,audio/*' :
                       '.docx,.doc'
                     }
                     onChange={(e) => {

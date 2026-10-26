@@ -11,6 +11,7 @@ import sys
 import tarfile
 import tempfile
 import json
+import pytest
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -381,3 +382,174 @@ def test_mixed_outline_each_unit_has_html_pair():
         for uuid in html_uuids:
             assert f"course/html/{uuid}.xml" in members
             assert f"course/html/{uuid}.html" in members
+
+
+# ===========================================================================
+# T2: Audio Unit Tests
+# ===========================================================================
+
+OUTLINE_AUDIO_UNIT = [
+    {
+        "title": "Chương 1",
+        "subsections": [
+            {
+                "title": "Bài 1",
+                "units": [
+                    {
+                        "title": "File nghe bài 1",
+                        "type": "audio",
+                        "file": "audio-test.mp3",
+                    },
+                ],
+            }
+        ],
+    }
+]
+
+def test_audio_unit_vertical_and_html_files():
+    """Unit type='audio' phải sinh descriptor Raw HTML và thẻ audio controls trong file .html."""
+    out = _export_to_tmpfile(OUTLINE_AUDIO_UNIT)
+    with tarfile.open(out) as tar:
+        members = _members(tar)
+        html_uuids = []
+        for m in tar.getmembers():
+            if m.name.startswith("course/vertical/") and m.name.endswith(".xml"):
+                root = ET.fromstring(_read(tar, m.name))
+                for child in root:
+                    if child.tag == "html":
+                        html_uuids.append(child.attrib["url_name"])
+
+        assert len(html_uuids) == 1, "Phải có đúng 1 html component cho audio unit"
+        uuid = html_uuids[0]
+
+        # 1. Descriptor XML phải có editor="raw"
+        desc_path = f"course/html/{uuid}.xml"
+        assert desc_path in members, f"Thiếu {desc_path}"
+        desc_root = ET.fromstring(_read(tar, desc_path))
+        assert desc_root.get("editor") == "raw", "Audio descriptor phải có editor='raw'"
+        assert desc_root.get("filename") == uuid
+
+        # 2. File .html phải chứa audio tag đúng chuẩn Studio
+        content_path = f"course/html/{uuid}.html"
+        assert content_path in members, f"Thiếu {content_path}"
+        html_content = _read(tar, content_path)
+        assert "<audio controls>" in html_content
+        assert '<source src="/static/audio-test.mp3" type="audio/mp3">' in html_content
+        assert "<p>File nghe bài 1</p>" in html_content
+
+
+def test_audio_unit_file_copied_to_static_and_assets_json(tmp_path):
+    """File MP3 upload phải được copy vào static/ và ghi contentType='audio/mpeg' trong assets.json."""
+    fake_mp3 = tmp_path / "audio-test.mp3"
+    fake_mp3.write_bytes(b"ID3fake_mp3_content")
+
+    out = _export_to_tmpfile(OUTLINE_AUDIO_UNIT, pdf_paths=[str(fake_mp3)])
+    with tarfile.open(out) as tar:
+        members = _members(tar)
+
+        # File mp3 phải có trong static/
+        assert "course/static/audio-test.mp3" in members, "audio-test.mp3 không được copy vào course/static/"
+
+        # assets.json phải có contentType là audio/mpeg
+        assets = json.loads(_read(tar, "course/policies/assets.json"))
+        assert "audio-test.mp3" in assets, "audio-test.mp3 thiếu trong assets.json"
+        entry = assets["audio-test.mp3"]
+        assert entry["contentType"] == "audio/mpeg", f"MIME type sai: {entry['contentType']}"
+        assert "filename" in entry
+        assert entry["locked"] is False
+
+
+def test_audio_unit_supports_audio_file_field():
+    """Unit type='audio' có thể nhận tên file qua trường 'audio_file' thay vì 'file'."""
+    outline = [
+        {
+            "title": "Chương 1",
+            "subsections": [
+                {
+                    "title": "Bài 1",
+                    "units": [
+                        {
+                            "title": "Nghe hiểu",
+                            "type": "audio",
+                            "audio_file": "listening-02.mp3",
+                        },
+                    ],
+                }
+            ],
+        }
+    ]
+    out = _export_to_tmpfile(outline)
+    with tarfile.open(out) as tar:
+        found_audio = False
+        for m in tar.getmembers():
+            if m.name.startswith("course/html/") and m.name.endswith(".html"):
+                content = _read(tar, m.name)
+                if '<source src="/static/listening-02.mp3" type="audio/mp3">' in content:
+                    found_audio = True
+                    break
+        assert found_audio, "Không tìm thấy listening-02.mp3 trong file html của audio component"
+
+
+def test_audio_unit_without_file():
+    """Unit type='audio' khi không có file thì tạo thông báo phù hợp, không crash."""
+    outline = [
+        {
+            "title": "Chương 1",
+            "subsections": [
+                {
+                    "title": "Bài 1",
+                    "units": [
+                        {"title": "Unit Audio Trống", "type": "audio"},
+                    ],
+                }
+            ],
+        }
+    ]
+    out = _export_to_tmpfile(outline)
+    with tarfile.open(out) as tar:
+        found_msg = False
+        for m in tar.getmembers():
+            if m.name.startswith("course/html/") and m.name.endswith(".html"):
+                content = _read(tar, m.name)
+                if "Audio không tồn tại" in content:
+                    found_msg = True
+                    break
+        assert found_msg, "Audio unit không có file phải hiển thị thông báo an toàn"
+
+
+@pytest.mark.anyio
+async def test_export_openedx_endpoint_accepts_mp3():
+    """Endpoint export_openedx phải tiếp nhận file .mp3 và đưa vào gói export."""
+    from io import BytesIO
+    from fastapi import UploadFile
+    from app.api.v1.endpoints.export import export_openedx
+
+    mp3_bytes = b"ID3_fake_audio_data"
+    upload = UploadFile(filename="unit-audio-01.mp3", file=BytesIO(mp3_bytes))
+    outline = json.dumps({"outline": OUTLINE_AUDIO_UNIT})
+    questions = json.dumps([])
+
+    resp = await export_openedx(
+        files=[upload],
+        outline=outline,
+        questions=questions,
+        filename="test_audio_endpoint_export"
+    )
+    assert resp.success is True
+    assert resp.tar_file.endswith(".tar.gz")
+
+    # Kiểm tra file tar thực tế được sinh ra
+    tar_real_path = Path(BACKEND) / resp.tar_file.lstrip("/")
+    if not tar_real_path.exists():
+        # Thử đường dẫn từ thư mục backend
+        tar_real_path = Path(BACKEND) / "exports" / Path(resp.tar_file).name
+
+    if tar_real_path.exists():
+        with tarfile.open(tar_real_path) as tar:
+            members = _members(tar)
+            assert "course/static/unit-audio-01.mp3" in members
+            assets = json.loads(_read(tar, "course/policies/assets.json"))
+            assert "unit-audio-01.mp3" in assets
+            assert assets["unit-audio-01.mp3"]["contentType"] == "audio/mpeg"
+
+

@@ -80,12 +80,15 @@ export default function CourseGeneratorTool() {
   };
   // removed legacy text/LLM handlers
 
-  // Handle folder upload for PDF files
+  // Handle folder upload for PDF and Audio files
   const handleFolderUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
-    const pdfFiles = files.filter(file => file.type === 'application/pdf');
-    setPdfFiles(pdfFiles);
-    setMappingStatus(`Đã chọn ${pdfFiles.length} file PDF`);
+    const assetFiles = files.filter(file => {
+      const name = file.name.toLowerCase();
+      return name.endsWith('.pdf') || name.endsWith('.mp3') || file.type === 'application/pdf' || file.type.startsWith('audio/');
+    });
+    setPdfFiles(assetFiles);
+    setMappingStatus(`Đã chọn ${assetFiles.length} file (PDF/Audio)`);
   };
 
   // Auto-map PDF files to outline
@@ -280,14 +283,14 @@ export default function CourseGeneratorTool() {
           {/* Removed text/LLM upload flow; only Excel/CSV import remains */}
 
           <Paper sx={{ p: 2, mb: 3 }}>
-            <Typography variant="h6" mb={2}>2. Upload folder PDF slides (tùy chọn)</Typography>
+            <Typography variant="h6" mb={2}>2. Upload folder PDF slides / Audio (tùy chọn)</Typography>
             <Typography variant="body2" color="text.secondary" mb={2}>
-              Upload folder chứa các file PDF slides. Hệ thống sẽ tự động phân tích tên file và mapping vào outline.
+              Upload folder chứa các file PDF slides hoặc file audio MP3. Hệ thống sẽ tự động phân tích và đưa vào gói tài nguyên.
             </Typography>
             <input
               type="file"
               multiple
-              accept=".pdf"
+              accept=".pdf,.mp3,audio/*"
               onChange={handleFolderUpload}
               style={{ display: 'none' }}
               id="pdf-folder-upload"
@@ -299,13 +302,13 @@ export default function CourseGeneratorTool() {
                 startIcon={<FolderIcon />}
                 sx={{ mr: 2 }}
               >
-                Chọn folder PDF
+                Chọn files PDF / Audio
               </Button>
             </label>
             {pdfFiles.length > 0 && (
               <Box sx={{ mt: 2 }}>
                 <Typography variant="body2" color="primary">
-                  {mappingStatus || `Đã chọn ${pdfFiles.length} file PDF`}
+                  {mappingStatus || `Đã chọn ${pdfFiles.length} file (PDF/Audio)`}
                 </Typography>
                 <Box sx={{ mt: 1, maxHeight: 200, overflow: 'auto' }}>
                   {pdfFiles.map((file, index) => (

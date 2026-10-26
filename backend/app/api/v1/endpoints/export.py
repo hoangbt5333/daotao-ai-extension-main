@@ -40,21 +40,23 @@ async def export_openedx(
         tar_name = f"{safe_filename}.tar.gz"
         tar_path = os.path.join(settings.file.export_dir, tar_name)
         
-        # Save uploaded files to temporary paths
-        uploaded_pdf_paths = []
+        # Save uploaded asset files (PDF, MP3, etc.) to temporary paths
+        allowed_extensions = ('.pdf', '.mp3', '.ogg', '.wav')
+        uploaded_asset_paths = []
         for file in files:
-            if file.filename and file.filename.lower().endswith('.pdf'):
+            if file.filename and file.filename.lower().endswith(allowed_extensions):
                 temp_file_path = os.path.join(temp_dir, file.filename)
                 with open(temp_file_path, "wb") as buffer:
                     shutil.copyfileobj(file.file, buffer)
-                uploaded_pdf_paths.append(temp_file_path)
+                uploaded_asset_paths.append(temp_file_path)
         
         try:
             # Prepare data for export
             export_data = {
                 "outline": outline_data.get('outline', []) if isinstance(outline_data, dict) else outline_data,
                 "questions": questions_data.get('questions', []) if isinstance(questions_data, dict) else questions_data,
-                "uploaded_pdfs": uploaded_pdf_paths
+                "uploaded_pdfs": uploaded_asset_paths,
+                "uploaded_assets": uploaded_asset_paths
             }
             
             # Export using service

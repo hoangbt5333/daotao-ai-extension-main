@@ -86,7 +86,7 @@ class OpenEdXExporter(Exporter):
         """Export course structure to OpenEdX format"""
         outline = data.get("outline", [])
         questions = data.get("questions", [])
-        uploaded_pdfs = data.get("uploaded_pdfs", [])
+        uploaded_assets = data.get("uploaded_assets") or data.get("uploaded_pdfs", [])
         
         # Get course directory path
         course_dir = os.path.join(output_dir, 'course')
@@ -136,8 +136,8 @@ class OpenEdXExporter(Exporter):
         # Create problems from questions
         self._create_problems_from_questions(questions, course_dir)
         
-        # Copy uploaded PDFs to static directory
-        self._copy_pdfs_to_static(uploaded_pdfs, course_dir)
+        # Copy uploaded assets (PDF, MP3, ...) to static directory
+        self._copy_assets_to_static(uploaded_assets, course_dir)
         
         # Create policies/assets.json
         self._create_assets_json(course_dir)
@@ -295,6 +295,24 @@ class OpenEdXExporter(Exporter):
                 else:
                     pdf_body = '<p>PDF không tồn tại.</p>'
                 self._write_html_component(html_uuid, vertical_title, pdf_body, editor_raw=True)
+
+            elif unit_type == 'audio':
+                # HTML component nhúng Audio (Raw HTML)
+                html_uuid = self._generate_uuid()
+                html_elem = ET.SubElement(vertical_elem, "html")
+                html_elem.set("url_name", html_uuid)
+
+                audio_filename = unit_data.get('audio_file') or unit_data.get('file', '')
+                if audio_filename:
+                    audio_body = (
+                        f"<p>{vertical_title}</p>\n\n"
+                        f"<audio controls>\n"
+                        f'  <source src="/static/{audio_filename}" type="audio/mp3">\n'
+                        f"</audio>"
+                    )
+                else:
+                    audio_body = f"<p>{vertical_title}</p>\n<p>Audio không tồn tại.</p>"
+                self._write_html_component(html_uuid, vertical_title, audio_body, editor_raw=True)
 
             elif unit_type == 'docx':
                 # DOCX: phần mềm không đọc được nội dung file DOCX hiện tại;
