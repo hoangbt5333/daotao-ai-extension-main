@@ -208,76 +208,110 @@ class OpenEdXExporter(Exporter):
         
         return ET.tostring(sequential_elem, encoding='unicode')
     
+    def _write_html_component(self, html_uuid: str, display_name: str, html_body: str, editor_raw: bool = False) -> None:
+        """Write a pair of html/{uuid}.xml and html/{uuid}.html files.
+
+        This matches the Open edX OLX standard where:
+        - {uuid}.xml  – descriptor (metadata only, no inline content)
+        - {uuid}.html – actual HTML content
+        """
+        html_dir = os.path.join(self.current_course_dir, 'html')
+        os.makedirs(html_dir, exist_ok=True)
+
+        # Descriptor XML
+        if editor_raw:
+            descriptor = f'<html filename="{html_uuid}" display_name="Raw HTML" editor="raw"/>'
+        else:
+            descriptor = f'<html filename="{html_uuid}"/>'
+        with open(os.path.join(html_dir, f'{html_uuid}.xml'), 'w', encoding='utf-8') as f:
+            f.write(descriptor)
+
+        # Content HTML
+        with open(os.path.join(html_dir, f'{html_uuid}.html'), 'w', encoding='utf-8') as f:
+            f.write(html_body)
+
+        self.logger.info(f"Created html component: {html_uuid}")
+
     def _create_vertical_xml(self, vertical_title: str, unit_data: Dict[str, Any], vertical_id: str) -> str:
-        """Create vertical.xml file"""
+        """Create vertical.xml file.
+
+        The <vertical> tag carries only display_name (no url_name inline —
+        the filename itself is the url_name, matching Studio OLX export).
+        Child component tags are bare reference stubs: <html url_name="…"/>.
+        All HTML content lives in separate html/{uuid}.xml + html/{uuid}.html files.
+        """
         vertical_elem = ET.Element("vertical")
         vertical_elem.set("display_name", vertical_title)
-        vertical_elem.set("url_name", vertical_id)
-        
+        # NOTE: do NOT set url_name here — the filename is the url_name per OLX spec.
+
         if unit_data:
             unit_type = unit_data.get('type', 'text')
-            
+
             if unit_type == 'video':
-                # Add video component with reference to video XML file
+                # Reference to video XML file
                 video_url_name = self._generate_uuid()
                 video_elem = ET.SubElement(vertical_elem, "video")
                 video_elem.set("url_name", video_url_name)
-                
-                # Create video XML file
                 self._create_video_xml(vertical_title, unit_data, video_url_name)
-                
+
             elif unit_type == 'video_pdf':
-                # Add video component with reference to video XML file
+                # Video reference
                 video_url_name = self._generate_uuid()
                 video_elem = ET.SubElement(vertical_elem, "video")
                 video_elem.set("url_name", video_url_name)
-                
-                # Create video XML file
                 self._create_video_xml(vertical_title, unit_data, video_url_name)
-                
-                # Add PDF component below video
+
+                # HTML component for PDF (written to html/ directory)
                 pdf_filename = unit_data.get('pdf_file', '')
                 if pdf_filename:
+                    html_uuid = self._generate_uuid()
                     html_elem = ET.SubElement(vertical_elem, "html")
-                    html_elem.set("display_name", f"{vertical_title} - Tài liệu PDF")
-                    html_elem.set("url_name", self._generate_uuid())
-                    
-                    # Create HTML with PDF link
-                    pdf_html = f"""
-                    <div style="margin-top: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px;">
-                        <h4>Tài liệu tham khảo</h4>
-                        <p>Xem tài liệu PDF: <a href="/static/{pdf_filename}" target="_blank">{pdf_filename}</a></p>
-                        <iframe src="/static/{pdf_filename}" width="100%" height="600px" style="border:none; margin-top: 10px;"></iframe>
-                    </div>
-                    """
-                    html_elem.text = pdf_html
-                
+                    html_elem.set("url_name", html_uuid)
+
+                    pdf_html = (
+                        '<div style="margin-top: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px;">\n'
+                        '    <h4>Tài liệu tham khảo</h4>\n'
+                        f'    <p>Xem tài liệu PDF: <a href="/static/{pdf_filename}" target="_blank">{pdf_filename}</a></p>\n'
+                        f'    <iframe src="/static/{pdf_filename}" width="100%" height="600px" style="border:none; margin-top: 10px;"></iframe>\n'
+                        '</div>'
+                    )
+                    self._write_html_component(html_uuid, f"{vertical_title} - Tài liệu PDF", pdf_html)
+
             elif unit_type == 'pdf':
-                # Add HTML component nhúng iframe PDF
+                # HTML component nhúng iframe PDF
+                html_uuid = self._generate_uuid()
                 html_elem = ET.SubElement(vertical_elem, "html")
-                html_elem.set("display_name", vertical_title)
-                html_elem.set("url_name", self._generate_uuid())
-                
+                html_elem.set("url_name", html_uuid)
+
                 pdf_filename = unit_data.get('file', '')
                 if pdf_filename:
-                    # Nhúng iframe src="/static/filename.pdf"
-                    iframe_html = f'<iframe src="/static/{pdf_filename}" width="100%" height="600px" style="border:none;"></iframe>'
-                    html_elem.text = iframe_html
+                    pdf_body = (
+                        '<div style="margin-top: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px;">\n'
+                        '    <h4>Tài liệu tham khảo</h4>\n'
+                        f'    <p>Xem tài liệu PDF: <a href="/static/{pdf_filename}" target="_blank">{pdf_filename}</a></p>\n'
+                        f'    <iframe src="/static/{pdf_filename}" width="100%" height="600px" style="border:none; margin-top: 10px;"></iframe>\n'
+                        '</div>'
+                    )
                 else:
-                    html_elem.text = '<p>PDF không tồn tại.</p>'
-            
+                    pdf_body = '<p>PDF không tồn tại.</p>'
+                self._write_html_component(html_uuid, vertical_title, pdf_body, editor_raw=True)
+
             elif unit_type == 'docx':
-                # Add document component
-                doc_elem = ET.SubElement(vertical_elem, "html")
-                doc_elem.set("display_name", vertical_title)
-                doc_elem.set("url_name", self._generate_uuid())
-                
+                # DOCX: phần mềm không đọc được nội dung file DOCX hiện tại;
+                # tạo placeholder HTML — nội dung sẽ được điền ở task sau.
+                html_uuid = self._generate_uuid()
+                html_elem = ET.SubElement(vertical_elem, "html")
+                html_elem.set("url_name", html_uuid)
+                self._write_html_component(html_uuid, vertical_title, '<p>(Nội dung DOCX)</p>')
+
             else:
-                # Default text content
+                # Default: text/HTML trơn
+                html_uuid = self._generate_uuid()
                 text_elem = ET.SubElement(vertical_elem, "html")
-                text_elem.set("display_name", vertical_title)
-                text_elem.set("url_name", self._generate_uuid())
-        
+                text_elem.set("url_name", html_uuid)
+                html_body = unit_data.get('html_content', '') or '<p></p>'
+                self._write_html_component(html_uuid, vertical_title, html_body)
+
         return ET.tostring(vertical_elem, encoding='unicode')
     
     def _create_video_xml(self, video_title: str, unit_data: Dict[str, Any], video_url_name: str):
@@ -446,24 +480,84 @@ class OpenEdXExporter(Exporter):
         
         return ET.tostring(problem_elem, encoding='unicode')
     
+    # MIME type map for assets placed in course/static/
+    _MIME_BY_EXT: Dict[str, str] = {
+        '.pdf':  'application/pdf',
+        '.mp3':  'audio/mpeg',
+        '.mp4':  'video/mp4',
+        '.ogg':  'audio/ogg',
+        '.webm': 'video/webm',
+        '.png':  'image/png',
+        '.jpg':  'image/jpeg',
+        '.jpeg': 'image/jpeg',
+    }
+
     def _copy_pdfs_to_static(self, uploaded_pdfs: List[str], course_dir: str):
-        """Copy uploaded PDFs to static directory"""
+        """Copy uploaded asset files (PDF, MP3, …) to static directory.
+
+        Renamed intent: handles any asset type, not just PDF.
+        The old name is preserved to avoid breaking callers; actual logic
+        now delegates to _copy_assets_to_static.
+        """
+        self._copy_assets_to_static(uploaded_pdfs, course_dir)
+
+    def _copy_assets_to_static(self, asset_paths: List[str], course_dir: str):
+        """Copy uploaded asset files to course/static/ directory."""
         static_dir = os.path.join(course_dir, "static")
-        
-        for pdf_path in uploaded_pdfs:
-            if os.path.exists(pdf_path):
-                filename = os.path.basename(pdf_path)
+        os.makedirs(static_dir, exist_ok=True)
+
+        for asset_path in asset_paths:
+            if os.path.exists(asset_path):
+                filename = os.path.basename(asset_path)
                 dest_path = os.path.join(static_dir, filename)
-                shutil.copy2(pdf_path, dest_path)
-                self.logger.info(f"Copied PDF: {filename}")
-    
+                shutil.copy2(asset_path, dest_path)
+                self.logger.info(f"Copied asset to static: {filename}")
+
     def _create_assets_json(self, course_dir: str):
-        """Create policies/assets.json file"""
-        assets_data = {"assets": []}
-        policies_dir = os.path.join(course_dir, "policies")
-        
+        """Create policies/assets.json from files actually present in course/static/.
+
+        Generates the dict-map format that Open edX Studio exports, e.g.:
+        {
+          "slide.pdf": {
+            "contentType": "application/pdf",
+            "displayname": "slide.pdf",
+            "filename": "asset-v1:{org}+{course}+{run}+type@asset+block@slide.pdf",
+            "locked": false
+          }
+        }
+        """
         import json
-        with open(os.path.join(policies_dir, "assets.json"), 'w', encoding='utf-8') as f:
+
+        static_dir = os.path.join(course_dir, 'static')
+        policies_dir = os.path.join(course_dir, 'policies')
+        os.makedirs(policies_dir, exist_ok=True)
+
+        # Read org/course/run from course.xml if present; fall back to defaults.
+        org, course_code, run = 'SoDiTEC', 'TDC01', '2024-May'
+        course_xml_path = os.path.join(course_dir, 'course.xml')
+        if os.path.exists(course_xml_path):
+            try:
+                root = ET.parse(course_xml_path).getroot()
+                org = root.get('org', org)
+                course_code = root.get('course', course_code)
+                run = root.get('url_name', run)
+            except Exception:
+                pass
+
+        assets_data: Dict[str, Any] = {}
+
+        if os.path.isdir(static_dir):
+            for fname in sorted(os.listdir(static_dir)):
+                ext = os.path.splitext(fname)[1].lower()
+                content_type = self._MIME_BY_EXT.get(ext, 'application/octet-stream')
+                assets_data[fname] = {
+                    'contentType': content_type,
+                    'displayname': fname,
+                    'filename': f'asset-v1:{org}+{course_code}+{run}+type@asset+block@{fname}',
+                    'locked': False,
+                }
+
+        with open(os.path.join(policies_dir, 'assets.json'), 'w', encoding='utf-8') as f:
             json.dump(assets_data, f, ensure_ascii=False, indent=2)
     
     def _create_tarfile(self, source_dir: str, output_path: str):
