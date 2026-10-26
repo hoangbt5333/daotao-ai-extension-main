@@ -553,3 +553,139 @@ async def test_export_openedx_endpoint_accepts_mp3():
             assert assets["unit-audio-01.mp3"]["contentType"] == "audio/mpeg"
 
 
+# ===========================================================================
+# T3: Outline Parser Excel Tests (Phương án A)
+# ===========================================================================
+
+import openpyxl
+from io import BytesIO
+from fastapi import UploadFile
+from app.api.v1.endpoints.outline import import_outline_excel
+
+
+@pytest.mark.anyio
+async def test_outline_legacy_5_columns_backward_compatible():
+    """File Excel cũ với đúng 5 cột (Chapter, Lesson, Unit, Slide, Youtube) hoạt động 100% bình thường."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Outline"
+    ws.append(["Chapter", "Lesson", "Unit", "Slide", "Youtube"])
+    ws.append(["Chương 1", "Bài 1", "Unit Slide", "slide1.pdf", ""])
+    ws.append(["Chương 1", "Bài 1", "Unit Video", "", "https://youtu.be/abc12345678"])
+    ws.append(["Chương 1", "Bài 1", "Unit Video+PDF", "slide2.pdf", "https://youtu.be/def12345678"])
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+
+    upload = UploadFile(filename="legacy_outline.xlsx", file=bio)
+    res = await import_outline_excel(file=upload)
+
+    assert res.success is True, f"Import thất bại: {res.message}"
+    chapters = res.outline.get("outline", [])
+    assert len(chapters) == 1
+    units = chapters[0]["subsections"][0]["units"]
+    assert len(units) == 3
+
+    assert units[0]["type"] == "pdf"
+    assert units[0]["file"] == "slide1.pdf"
+
+    assert units[1]["type"] == "video"
+    assert units[1]["video_url"] == "https://youtu.be/abc12345678"
+
+    assert units[2]["type"] == "video_pdf"
+    assert units[2]["pdf_file"] == "slide2.pdf"
+
+
+@pytest.mark.anyio
+async def test_outline_new_columns_type_and_content():
+    """File Excel mới có cột Type và Content: nhận diện chính xác các loại unit mới."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Outline"
+    ws.append(["Chapter", "Lesson", "Unit", "Type", "Content", "Slide", "Youtube"])
+    ws.append(["Chương 1", "Bài 1", "Unit Audio", "audio", "listen.mp3", "", ""])
+    ws.append(["Chương 1", "Bài 1", "Unit Text", "text", "<p>Bài đọc văn bản</p>", "", ""])
+    ws.append(["Chương 1", "Bài 1", "Unit Embed", "embed", '<iframe src="https://drive.google.com/xyz"></iframe>', "", ""])
+    ws.append(["Chương 1", "Bài 1", "Unit PDF Direct", "pdf", "tailieu.pdf", "", ""])
+    # Hàng Type để trống -> fallback về Slide
+    ws.append(["Chương 1", "Bài 1", "Unit Fallback", "", "", "fallback.pdf", ""])
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+
+    upload = UploadFile(filename="new_columns_outline.xlsx", file=bio)
+    res = await import_outline_excel(file=upload)
+
+    assert res.success is True, f"Import thất bại: {res.message}"
+    chapters = res.outline.get("outline", [])
+    units = chapters[0]["subsections"][0]["units"]
+    assert len(units) == 5
+
+    # 1. Audio
+    assert units[0]["type"] == "audio"
+    assert units[0]["audio_file"] == "listen.mp3"
+
+    # 2. Text
+    assert units[1]["type"] == "text"
+    assert units[1]["html_content"] == "<p>Bài đọc văn bản</p>"
+
+    # 3. Embed
+    assert units[2]["type"] == "embed"
+    assert 'iframe src="https://drive.google.com/xyz"' in units[2]["embed_code"]
+
+    # 4. PDF
+    assert units[3]["type"] == "pdf"
+    assert units[3]["file"] == "tailieu.pdf"
+
+    # 5. Fallback khi Type để trống
+    assert units[4]["type"] == "pdf"
+    assert units[4]["file"] == "fallback.pdf"
+
+
+@pytest.mark.anyio
+async def test_outline_csv_support_both_legacy_and_new():
+    """Hỗ trợ CSV cho cả định dạng cũ (5 cột) và mới (có Type, Content)."""
+    # 1. CSV mới có Type & Content
+    csv_text = (
+        "Chapter,Lesson,Unit,Type,Content,Slide,Youtube\n"
+        "Chương 1,Bài 1,Nghe bài 1,audio,audio1.mp3,,\n"
+        "Chương 1,Bài 1,Đọc bài 1,text,<p>Doc</p>,,\n"
+    )
+    bio = BytesIO(csv_text.encode("utf-8-sig"))
+    upload = UploadFile(filename="outline.csv", file=bio)
+    res = await import_outline_excel(file=upload)
+    assert res.success is True
+    units = res.outline["outline"][0]["subsections"][0]["units"]
+    assert units[0]["type"] == "audio"
+    assert units[0]["audio_file"] == "audio1.mp3"
+    assert units[1]["type"] == "text"
+
+    # 2. CSV cũ không có Type & Content
+    csv_legacy = (
+        "Chapter,Lesson,Unit,Slide,Youtube\n"
+        "Chương 1,Bài 1,Slide 1,bai1.pdf,\n"
+    )
+    bio_legacy = BytesIO(csv_legacy.encode("utf-8-sig"))
+    upload_legacy = UploadFile(filename="legacy.csv", file=bio_legacy)
+    res_legacy = await import_outline_excel(file=upload_legacy)
+    assert res_legacy.success is True
+    units_legacy = res_legacy.outline["outline"][0]["subsections"][0]["units"]
+    assert units_legacy[0]["type"] == "pdf"
+    assert units_legacy[0]["file"] == "bai1.pdf"
+
+
+@pytest.mark.anyio
+async def test_outline_missing_required_headers_returns_error():
+    """Thiếu cột bắt buộc (Chapter, Lesson hoặc Unit) phải trả về thông báo lỗi rõ ràng."""
+    csv_bad = "Lesson,Unit,Slide\nBài 1,Unit 1,slide.pdf\n"
+    bio = BytesIO(csv_bad.encode("utf-8"))
+    upload = UploadFile(filename="bad.csv", file=bio)
+    res = await import_outline_excel(file=upload)
+    assert res.success is False
+    assert "Thiếu cột bắt buộc" in res.message
+    assert "Chapter" in res.message
+
+
+
