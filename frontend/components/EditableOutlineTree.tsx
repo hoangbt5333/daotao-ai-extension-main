@@ -33,17 +33,19 @@ import VideoFileIcon from '@mui/icons-material/VideoFile';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import DescriptionIcon from '@mui/icons-material/Description';
 import AudioFileIcon from '@mui/icons-material/AudioFile';
+import CodeIcon from '@mui/icons-material/Code';
 import UploadIcon from '@mui/icons-material/Upload';
 
 // Outline data type
 interface OutlineUnit {
   title: string;
-  type?: 'video' | 'pdf' | 'docx' | 'text' | 'video_pdf' | 'audio';
+  type?: 'video' | 'pdf' | 'docx' | 'text' | 'video_pdf' | 'audio' | 'embed';
   file?: File | null;
   fileUrl?: string;
   video_url?: string; // For video and video_pdf types
   pdf_file?: string; // For video_pdf type
   audio_file?: string; // For audio type
+  embed_code?: string; // For embed type (iframe, GDrive, SharePoint)
 }
 
 interface OutlineSubsection {
@@ -84,10 +86,11 @@ export default function EditableOutlineTree({
     unitIdx?: number, 
     value: string, 
     mode: 'edit'|'add',
-    unitType?: 'video' | 'pdf' | 'docx' | 'text' | 'video_pdf' | 'audio',
+    unitType?: 'video' | 'pdf' | 'docx' | 'text' | 'video_pdf' | 'audio' | 'embed',
     unitFile?: File | null,
     pdfFile?: File | null,
-    videoUrl?: string
+    videoUrl?: string,
+    embedCode?: string
   }>(null);
 
   // Log dữ liệu outline để debug
@@ -106,7 +109,8 @@ export default function EditableOutlineTree({
         unitType: unit?.type || 'text',
         unitFile: unit?.file || (unit?.audio_file ? new File([], unit.audio_file) : null),
         pdfFile: unit?.pdf_file ? new File([], unit.pdf_file) : null,
-        videoUrl: unit?.video_url || ''
+        videoUrl: unit?.video_url || '',
+        embedCode: unit?.embed_code || ''
       });
     } else {
     setEditDialog({ type, ...idxs, value, mode: 'edit' });
@@ -131,7 +135,7 @@ export default function EditableOutlineTree({
   
   const handleDialogSave = () => {
     if (!editDialog) return;
-    const { type, chapterIdx, subIdx, unitIdx, value, mode, unitType, unitFile, pdfFile, videoUrl } = editDialog;
+    const { type, chapterIdx, subIdx, unitIdx, value, mode, unitType, unitFile, pdfFile, videoUrl, embedCode } = editDialog;
     const newData = JSON.parse(JSON.stringify(safeOutlineData));
     
     if (type === 'chapter') {
@@ -163,6 +167,11 @@ export default function EditableOutlineTree({
       if (unitType === 'audio' && unitFile) {
         unitData.audio_file = unitFile.name;
       }
+
+      // Add embed_code for embed type
+      if (unitType === 'embed' && embedCode) {
+        unitData.embed_code = embedCode;
+      }
       
       if (mode === 'edit' && unitIdx !== undefined) {
         newData.outline[chapterIdx].subsections[subIdx].units[unitIdx] = {
@@ -181,6 +190,7 @@ export default function EditableOutlineTree({
       case 'video': return <VideoFileIcon fontSize="small" />;
       case 'pdf': return <PictureAsPdfIcon fontSize="small" />;
       case 'audio': return <AudioFileIcon fontSize="small" />;
+      case 'embed': return <CodeIcon fontSize="small" />;
       case 'docx': return <DescriptionIcon fontSize="small" />;
       case 'video_pdf': return <VideoFileIcon fontSize="small" />;
       default: return null;
@@ -192,6 +202,7 @@ export default function EditableOutlineTree({
       case 'video': return 'Video';
       case 'pdf': return 'PDF';
       case 'audio': return 'Audio (.mp3)';
+      case 'embed': return 'Nhúng (Embed / Iframe)';
       case 'docx': return 'DOCX';
       case 'video_pdf': return 'Video + PDF';
       default: return 'Text';
@@ -409,6 +420,7 @@ export default function EditableOutlineTree({
                   <MenuItem value="video">Video</MenuItem>
                   <MenuItem value="pdf">PDF</MenuItem>
                   <MenuItem value="audio">Audio (.mp3)</MenuItem>
+                  <MenuItem value="embed">Nhúng (GDrive / SharePoint / iframe)</MenuItem>
                   <MenuItem value="docx">DOCX</MenuItem>
                   <MenuItem value="video_pdf">Video + PDF</MenuItem>
                 </Select>
@@ -426,6 +438,25 @@ export default function EditableOutlineTree({
                     value={editDialog.videoUrl || ''}
                     onChange={(e) => setEditDialog(editDialog ? { ...editDialog, videoUrl: e.target.value } : null)}
                     helperText="Nhập đường link video từ cloud storage (YouTube, Vimeo, CDN, etc.)"
+                    sx={{ mb: 2 }}
+                  />
+                </Box>
+              )}
+
+              {editDialog.unitType === 'embed' && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Mã nhúng HTML (iframe) hoặc liên kết:
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={3}
+                    label="Mã nhúng iframe hoặc URL"
+                    placeholder='<iframe src="https://drive.google.com/file/d/.../preview" width="1200" height="640"></iframe>'
+                    value={editDialog.embedCode || ''}
+                    onChange={(e) => setEditDialog(editDialog ? { ...editDialog, embedCode: e.target.value } : null)}
+                    helperText="Dán mã nhúng <iframe> từ Google Drive, SharePoint, Microsoft Stream hoặc dán đường link chia sẻ"
                     sx={{ mb: 2 }}
                   />
                 </Box>

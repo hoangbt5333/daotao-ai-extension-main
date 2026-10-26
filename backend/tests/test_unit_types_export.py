@@ -688,4 +688,199 @@ async def test_outline_missing_required_headers_returns_error():
     assert "Chapter" in res.message
 
 
+# ===========================================================================
+# T4: Embed Unit Tests (GDrive, SharePoint, Stream)
+# ===========================================================================
+
+def test_embed_unit_with_gdrive_iframe():
+    """Unit type='embed' với iframe GDrive phải tạo descriptor editor='raw' và file .html chứa iframe."""
+    outline = [
+        {
+            "title": "Chương 2",
+            "subsections": [
+                {
+                    "title": "Driver",
+                    "units": [
+                        {
+                            "title": "Tài liệu GDrive",
+                            "type": "embed",
+                            "embed_code": '<iframe src="https://drive.google.com/file/d/1j_U4iIOuDmustIeotHr9qDOvYCOw7tMe/preview" width="1200" height="640" allow="autoplay"></iframe>',
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
+    out = _export_to_tmpfile(outline)
+    with tarfile.open(out) as tar:
+        members = _members(tar)
+        html_uuids = []
+        for m in tar.getmembers():
+            if m.name.startswith("course/vertical/") and m.name.endswith(".xml"):
+                root = ET.fromstring(_read(tar, m.name))
+                for child in root:
+                    if child.tag == "html":
+                        html_uuids.append(child.attrib["url_name"])
+
+        assert len(html_uuids) == 1
+        uuid = html_uuids[0]
+
+        # 1. Descriptor XML có editor="raw"
+        desc_root = ET.fromstring(_read(tar, f"course/html/{uuid}.xml"))
+        assert desc_root.get("editor") == "raw"
+        assert desc_root.get("filename") == uuid
+
+        # 2. File .html chứa iframe GDrive nguyên vẹn
+        html_content = _read(tar, f"course/html/{uuid}.html")
+        assert 'https://drive.google.com/file/d/1j_U4iIOuDmustIeotHr9qDOvYCOw7tMe/preview' in html_content
+        assert 'width="1200"' in html_content
+        assert 'height="640"' in html_content
+
+        # 3. Không có file nào copy vào static (vì là nhúng ngoài)
+        static_files = [m for m in members if m.startswith("course/static/") and not m.endswith("/")]
+        assert len(static_files) == 0
+
+
+def test_embed_unit_with_sharepoint_iframe():
+    """Unit type='embed' với iframe SharePoint (có ký tự &amp;) phải giữ nguyên vẹn mã iframe."""
+    sp_iframe = '<iframe src="https://husteduvn-my.sharepoint.com/.../Doc.aspx?sourcedoc={452f791f}&amp;action=embedview" width="476px" height="288px" frameborder="0">This is embedded Office document.</iframe>'
+    outline = [
+        {
+            "title": "Chương 2",
+            "subsections": [
+                {
+                    "title": "SharePoint",
+                    "units": [
+                        {
+                            "title": "Slide SharePoint",
+                            "type": "embed",
+                            "embed_code": sp_iframe,
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
+    out = _export_to_tmpfile(outline)
+    with tarfile.open(out) as tar:
+        for m in tar.getmembers():
+            if m.name.startswith("course/html/") and m.name.endswith(".html"):
+                content = _read(tar, m.name)
+                assert "sharepoint.com" in content
+                assert "action=embedview" in content
+
+
+def test_embed_unit_sanitizes_xss():
+    """Xóa bỏ các thẻ <script> và sự kiện inline on* khỏi mã nhúng để phòng chống XSS."""
+    malicious_embed = (
+        '<script>alert("hack")</script>'
+        '<iframe src="https://drive.google.com/test/preview" onload="alert(1)" onclick="stealCookie()"></iframe>'
+        '<style>body{display:none;}</style>'
+    )
+    outline = [
+        {
+            "title": "Chương 1",
+            "subsections": [
+                {
+                    "title": "Bài 1",
+                    "units": [
+                        {"title": "Test XSS", "type": "embed", "embed_code": malicious_embed}
+                    ],
+                }
+            ],
+        }
+    ]
+    out = _export_to_tmpfile(outline)
+    with tarfile.open(out) as tar:
+        for m in tar.getmembers():
+            if m.name.startswith("course/html/") and m.name.endswith(".html"):
+                content = _read(tar, m.name)
+                # Thẻ script và style phải bị loại bỏ
+                assert "<script" not in content.lower()
+                assert "</script>" not in content.lower()
+                assert "<style" not in content.lower()
+                # Thuộc tính inline on* phải bị loại bỏ
+                assert "onload" not in content.lower()
+                assert "onclick" not in content.lower()
+                # Thẻ iframe an toàn vẫn được giữ lại
+                assert '<iframe src="https://drive.google.com/test/preview"' in content
+
+
+def test_embed_unit_converts_plain_gdrive_url_to_preview_iframe():
+    """URL Google Drive thuần dạng /view được tự động chuyển thành iframe /preview chuẩn 1200x640."""
+    plain_url = "https://drive.google.com/file/d/1I4LbTqDhpVtYgk-RoOl8nuPzo1CVEPBc/view?usp=sharing"
+    outline = [
+        {
+            "title": "Chương 1",
+            "subsections": [
+                {
+                    "title": "Bài 1",
+                    "units": [
+                        {"title": "GDrive Link", "type": "embed", "embed_code": plain_url}
+                    ],
+                }
+            ],
+        }
+    ]
+    out = _export_to_tmpfile(outline)
+    with tarfile.open(out) as tar:
+        for m in tar.getmembers():
+            if m.name.startswith("course/html/") and m.name.endswith(".html"):
+                content = _read(tar, m.name)
+                assert '<iframe src="https://drive.google.com/file/d/1I4LbTqDhpVtYgk-RoOl8nuPzo1CVEPBc/preview"' in content
+                assert 'width="1200"' in content
+                assert 'height="640"' in content
+
+
+@pytest.mark.anyio
+async def test_full_pipeline_excel_embed_to_export():
+    """Full Pipeline: Excel có unit embed -> import outline -> export tar.gz -> kiểm tra toàn diện."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Outline"
+    ws.append(["Chapter", "Lesson", "Unit", "Type", "Content"])
+    ws.append([
+        "Chương 1",
+        "Bài 1",
+        "Bài nhúng GDrive",
+        "embed",
+        '<iframe src="https://drive.google.com/file/d/demo123/preview" width="1200" height="640" allow="autoplay"></iframe>'
+    ])
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+
+    # 1. Import outline
+    import_res = await import_outline_excel(file=UploadFile(filename="embed.xlsx", file=bio))
+    assert import_res.success is True
+    outline_data = import_res.outline.get("outline", [])
+    assert len(outline_data) == 1
+
+    # 2. Export ra tar.gz
+    out = _export_to_tmpfile(outline_data)
+    with tarfile.open(out) as tar:
+        members = _members(tar)
+        # Kiểm tra vertical có thẻ html
+        found_html_desc = False
+        for m in members:
+            if m.startswith("course/html/") and m.endswith(".xml"):
+                desc = _read(tar, m)
+                if 'editor="raw"' in desc:
+                    found_html_desc = True
+                    break
+        assert found_html_desc, "Không tìm thấy html descriptor có editor='raw'"
+
+        # Kiểm tra file .html có iframe
+        found_iframe = False
+        for m in members:
+            if m.startswith("course/html/") and m.endswith(".html"):
+                body = _read(tar, m)
+                if 'https://drive.google.com/file/d/demo123/preview' in body:
+                    found_iframe = True
+                    break
+        assert found_iframe, "Không tìm thấy nội dung iframe trong file html"
+
+
+
 

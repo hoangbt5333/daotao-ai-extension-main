@@ -208,6 +208,42 @@ class OpenEdXExporter(Exporter):
         
         return ET.tostring(sequential_elem, encoding='unicode')
     
+    def _sanitize_embed(self, code_or_url: str) -> str:
+        """Sanitize embed code or wrap direct URL into a safe <iframe>.
+
+        Handles:
+        1. Plain URL:
+           - Google Drive: extracts file ID and wraps with preview iframe (1200x640, allow="autoplay")
+           - Other URLs: wraps into a safe responsive iframe
+        2. HTML embed code:
+           - Strips <script> tags and inline JS event handlers (onload, onerror, onclick, etc.)
+           - Strips javascript: URLs
+        """
+        raw = (code_or_url or "").strip()
+        if not raw:
+            return '<p>Nội dung nhúng không tồn tại.</p>'
+
+        # Case 1: Pure URL provided
+        if raw.startswith(('http://', 'https://')) and '<' not in raw:
+            # Check for Google Drive file link
+            gdrive_match = re.search(r'drive\.google\.com/file/d/([a-zA-Z0-9_-]+)', raw)
+            if gdrive_match:
+                file_id = gdrive_match.group(1)
+                preview_url = f"https://drive.google.com/file/d/{file_id}/preview"
+                return f'<iframe src="{preview_url}" width="1200" height="640" allow="autoplay"></iframe>'
+
+            # Default iframe for other URLs
+            escaped_url = raw.replace('"', '&quot;')
+            return f'<iframe src="{escaped_url}" width="100%" height="600px" frameborder="0" allowfullscreen></iframe>'
+
+        # Case 2: HTML snippet (strip script tags and on* event handlers)
+        sanitized = re.sub(r'<\s*script[^>]*>.*?<\s*/\s*script\s*>', '', raw, flags=re.IGNORECASE | re.DOTALL)
+        sanitized = re.sub(r'<\s*style[^>]*>.*?<\s*/\s*style\s*>', '', sanitized, flags=re.IGNORECASE | re.DOTALL)
+        sanitized = re.sub(r'\s+on[a-zA-Z]+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)', '', sanitized)
+        sanitized = re.sub(r'(src|href)\s*=\s*["\']\s*javascript:[^"\']*["\']', '', sanitized, flags=re.IGNORECASE)
+
+        return sanitized.strip()
+
     def _write_html_component(self, html_uuid: str, display_name: str, html_body: str, editor_raw: bool = False) -> None:
         """Write a pair of html/{uuid}.xml and html/{uuid}.html files.
 
@@ -313,6 +349,16 @@ class OpenEdXExporter(Exporter):
                 else:
                     audio_body = f"<p>{vertical_title}</p>\n<p>Audio không tồn tại.</p>"
                 self._write_html_component(html_uuid, vertical_title, audio_body, editor_raw=True)
+
+            elif unit_type in ['embed', 'raw_html', 'iframe']:
+                # HTML component nhúng (Raw HTML: GDrive, SharePoint, Stream, etc.)
+                html_uuid = self._generate_uuid()
+                html_elem = ET.SubElement(vertical_elem, "html")
+                html_elem.set("url_name", html_uuid)
+
+                embed_code = unit_data.get('embed_code') or unit_data.get('content', '')
+                embed_html = self._sanitize_embed(embed_code)
+                self._write_html_component(html_uuid, vertical_title, embed_html, editor_raw=True)
 
             elif unit_type == 'docx':
                 # DOCX: phần mềm không đọc được nội dung file DOCX hiện tại;
@@ -580,6 +626,9 @@ class OpenEdXExporter(Exporter):
     
     def _create_tarfile(self, source_dir: str, output_path: str):
         """Create tar.gz file from source directory"""
+        parent_dir = os.path.dirname(output_path)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
         with tarfile.open(output_path, "w:gz") as tar:
             for root, dirs, files in os.walk(source_dir):
                 for file in files:
