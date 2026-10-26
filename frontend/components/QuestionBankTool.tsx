@@ -65,7 +65,7 @@ export default function QuestionBankTool() {
   const [editTags, setEditTags] = useState<string[]>([]);
   const [editTagInput, setEditTagInput] = useState<string>("");
   // parseMode: 'llm' | 'custom_single' | 'multiple_select'
-  const [parseMode, setParseMode] = useState<'llm' | 'custom_single' | 'multiple_select'>('llm');
+  const [parseMode, setParseMode] = useState<'llm' | 'custom_single' | 'multiple_select'>('custom_single');
   const [userFormat, setUserFormat] = useState('');
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [exportQuestionType, setExportQuestionType] = useState<'multiple_choice' | 'multiple_select'>('multiple_choice');
@@ -224,9 +224,9 @@ export default function QuestionBankTool() {
             onChange={e => handleParseModeChange(e.target.value as 'llm' | 'custom_single' | 'multiple_select')}
             sx={{ mb: 2 }}
           >
-            <FormControlLabel value="llm" control={<Radio />} label="Để AI tự nhận diện (LLM)" />
             <FormControlLabel value="custom_single" control={<Radio />} label="Custom parser — một đáp án đúng" />
             <FormControlLabel value="multiple_select" control={<Radio />} label="Multiple Selection — nhiều đáp án đúng" />
+            <FormControlLabel value="llm" control={<Radio />} label="Để AI tự nhận diện (LLM)" />
           </RadioGroup>
           {parseMode !== 'llm' && (
             <Box sx={{ mb: 2 }}>
@@ -237,7 +237,7 @@ export default function QuestionBankTool() {
                 onClick={() => setShowGuide(!showGuide)}
                 sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2 }}
               >
-                {showGuide ? "Đóng hướng dẫn cú pháp (!)" : "Xem hướng dẫn cú pháp (!)"}
+                {showGuide ? "Đóng hướng dẫn cú pháp" : "Xem hướng dẫn cú pháp"}
               </Button>
             </Box>
           )}
