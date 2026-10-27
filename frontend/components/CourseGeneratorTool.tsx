@@ -219,23 +219,60 @@ export default function CourseGeneratorTool() {
 
             <Box sx={{ mt: 2 }}>
               <Alert severity="info">
-                <Typography variant="subtitle2" fontWeight={700} mb={1}>Quy ước/Quy định định dạng Excel/CSV</Typography>
+                <Typography variant="subtitle2" fontWeight={700} mb={1}>Quy ước / Quy định định dạng Excel/CSV</Typography>
                 <ul style={{ margin: 0, paddingLeft: 18 }}>
-                  <li><b>Header bắt buộc</b>: Chapter, Lesson, Unit, Slide, Youtube (đúng chính tả, phân biệt hoa thường).</li>
-                  <li><b>Excel .xlsx</b>: Hỗ trợ merged cells. Hệ thống sẽ <i>expand</i> vùng merge (lấy giá trị ô góc trên‑trái). Khuyến nghị không dùng merge để ổn định tối đa.</li>
-                  <li><b>CSV</b>: Lưu với mã hóa UTF‑8 (khuyến nghị UTF‑8 with BOM). Header phải đúng như trên.</li>
-                  <li><b>Tạo Unit</b>:
-                    <ul style={{ margin: 0, paddingLeft: 18 }}>
-                      <li>Có <i>Youtube</i> và <i>Slide</i> → type = "video_pdf"; dùng <code>video_url</code> và <code>pdf_file</code>.</li>
-                      <li>Chỉ <i>Youtube</i> → type = "video"; dùng <code>video_url</code>.</li>
-                      <li>Chỉ <i>Slide</i> → type = "pdf"; dùng <code>file</code> (tên file).</li>
-                      <li>Không có cả Youtube lẫn Slide → bỏ qua, không tạo unit.</li>
+                  <li>
+                    <b>Header bắt buộc:</b> <code>Chapter</code>, <code>Lesson</code>, <code>Unit</code> (đúng chính tả, phân biệt hoa thường).
+                  </li>
+                  <li>
+                    <b>Header tùy chọn:</b>
+                    <ul style={{ margin: '4px 0', paddingLeft: 18 }}>
+                      <li><code>Type</code>: Loại bài học (<code>audio</code>, <code>pdf</code>, <code>video</code>, <code>video_pdf</code>, <code>embed</code>, <code>text</code>).</li>
+                      <li><code>Content</code>: Tên file (PDF/MP3), liên kết (YouTube/Video/GDrive/SharePoint), mã nhúng <code>&lt;iframe&gt;</code>, hoặc nội dung văn bản.</li>
+                      <li><code>Slide</code>, <code>Youtube</code>: Cột truyền thống (vẫn hỗ trợ 100% để tương thích ngược với file mẫu cũ).</li>
                     </ul>
                   </li>
-                  <li><b>Gộp unit</b>: Các dòng trùng bộ <i>Chapter + Lesson + Unit</i> sẽ được hợp nhất vào 1 unit (ví dụ dòng 1 có YouTube, dòng 2 có Slide).</li>
-                  <li><b>Slide</b>: Điền <u>tên file PDF</u> (ví dụ: Bai1_1.pdf). Sau đó upload các PDF trùng tên ở bước kế tiếp để mapping tự động.</li>
-                  <li><b>Thiếu Lesson</b>: Tự động dùng "General" và hiển thị cảnh báo trong phần preview. <b>Chapter trống</b> sẽ lấy theo dòng gần nhất bên trên.</li>
-                  <li><b>Youtube</b>: Nên dùng liên kết YouTube dạng chuẩn (watch?v=ID, youtu.be/ID, hoặc embed/ID). Hệ thống sẽ tự trích <i>VIDEO_ID</i> để tương thích Open edX.</li>
+                  <li>
+                    <b>Quy tắc xác định loại Unit:</b>
+                    <ul style={{ margin: '4px 0', paddingLeft: 18 }}>
+                      <li>
+                        <b>Khi có cột Type:</b>
+                        <ul style={{ margin: '2px 0', paddingLeft: 18 }}>
+                          <li><code>Type = audio</code>: Bài giảng âm thanh. Cột <code>Content</code> (hoặc <code>Slide</code>) điền tên file MP3 (ví dụ: <code>bai1.mp3</code>). Tải file lên ở mục 2 bên dưới.</li>
+                          <li><code>Type = pdf</code>: Bài giảng tài liệu. Cột <code>Content</code> (hoặc <code>Slide</code>) điền tên file PDF (ví dụ: <code>bai1.pdf</code>). Tải file lên ở mục 2 bên dưới.</li>
+                          <li><code>Type = video</code>: Cột <code>Content</code> (hoặc <code>Youtube</code>) điền URL YouTube hoặc link video.</li>
+                          <li><code>Type = video_pdf</code>: Kết hợp xem video và slide PDF (khai báo link video và file slide tương ứng).</li>
+                          <li><code>Type = embed</code> (hoặc <code>iframe</code>): Nhúng Google Drive, SharePoint, OneDrive, Stream. Cột <code>Content</code> dán link chia sẻ hoặc mã <code>&lt;iframe&gt;</code> (link Google Drive sẽ tự động tạo iframe preview).</li>
+                          <li><code>Type = text</code>: Cột <code>Content</code> điền văn bản hoặc mã HTML trực tiếp.</li>
+                        </ul>
+                      </li>
+                      <li>
+                        <b>Khi không có cột Type (tương thích ngược):</b>
+                        <ul style={{ margin: '2px 0', paddingLeft: 18 }}>
+                          <li>Có cả <i>Youtube</i> và <i>Slide</i> → tạo bài học <code>video_pdf</code>.</li>
+                          <li>Chỉ <i>Youtube</i> → tạo bài học <code>video</code>.</li>
+                          <li>Chỉ <i>Slide</i> → tạo bài học <code>pdf</code>.</li>
+                          <li>Không có cả Youtube lẫn Slide nhưng có tên <i>Unit</i> → tạo bài học văn bản (<code>text</code>) trống để biên tập sau trên Studio.</li>
+                        </ul>
+                      </li>
+                    </ul>
+                  </li>
+                  <li>
+                    <b>Tải lên tài nguyên (Mục 2):</b> Các file PDF (<code>.pdf</code>) hoặc âm thanh (<code>.mp3</code>) có tên trong outline cần được chọn ở <i>Mục 2</i> để hệ thống tự động copy vào gói khóa học (<code>course/static/</code>).
+                  </li>
+                  <li>
+                    <b>Gộp unit:</b> Các dòng trùng bộ <i>Chapter + Lesson + Unit</i> sẽ được tự động hợp nhất vào 1 unit (ví dụ dòng 1 có YouTube, dòng 2 có Slide).
+                  </li>
+                  <li>
+                    <b>Kế thừa &amp; giá trị mặc định:</b> <b>Chapter trống</b> sẽ tự động lấy theo Chapter gần nhất bên trên. <b>Thiếu Lesson</b> sẽ tự động dùng mặc định &quot;General&quot; kèm cảnh báo trong preview.
+                  </li>
+                  <li>
+                    <b>Định dạng file:</b>
+                    <ul style={{ margin: '4px 0', paddingLeft: 18 }}>
+                      <li><b>Excel (.xlsx):</b> Hỗ trợ ô merge (hệ thống tự lấy giá trị góc trên-trái). Khuyến nghị không merge để đảm bảo tính ổn định cao nhất.</li>
+                      <li><b>CSV:</b> Lưu với mã hóa UTF-8 (khuyến nghị UTF-8 with BOM).</li>
+                    </ul>
+                  </li>
                 </ul>
               </Alert>
             </Box>
