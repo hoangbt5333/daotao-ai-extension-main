@@ -7,6 +7,7 @@ import {
 import UploadIcon from '@mui/icons-material/Upload';
 import EditIcon from '@mui/icons-material/Edit';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import AddIcon from '@mui/icons-material/Add';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
@@ -80,6 +81,24 @@ export default function QuestionBankTool() {
       // LLM hoặc custom_single đều mặc định export multiple_choice
       setExportQuestionType('multiple_choice');
     }
+  };
+
+  // Tạo bộ câu hỏi mới (làm sạch dữ liệu và về bước 1)
+  const handleCreateNew = () => {
+    setQuestionsText("");
+    setProcessedQuestions([]);
+    setTotalQuestions(0);
+    setTarFile(null);
+    setUserTags([]);
+    setTagsInput("");
+    setTagsExplanation("");
+    setLibraryName("Question Bank");
+    setEditIndex(null);
+    setEditQuestion(null);
+    setEditImage(null);
+    setEditTags([]);
+    setEditTagInput("");
+    setActiveStep(0);
   };
 
   const BACKEND = "http://localhost:8000";
@@ -624,12 +643,20 @@ Câu hỏi có nhiều đáp án đúng?
               </Typography>
             </>
           )}
-          <Box sx={{ mt: 3 }}>
+          <Box sx={{ mt: 3, display: 'flex', gap: 2, alignItems: 'center' }}>
             <Button
               variant="outlined"
               onClick={() => setActiveStep(1)}
             >
               ← Quay lại Bước 2
+            </Button>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={handleCreateNew}
+            >
+              Tạo bộ câu hỏi mới
             </Button>
           </Box>
       </Paper>
