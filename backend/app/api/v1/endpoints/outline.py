@@ -88,6 +88,7 @@ def _normalize_rows(sheet) -> (List[Dict[str, str]], List[str]):
     rows: List[Dict[str, str]] = []
     warnings: List[str] = []
     last_chapter = ""
+    last_lesson = ""
 
     for r in range(idx["row"] + 1, sheet.max_row + 1):
         ch = _get_cell_value(sheet, r, idx["Chapter"], merged_map).strip()
@@ -104,11 +105,19 @@ def _normalize_rows(sheet) -> (List[Dict[str, str]], List[str]):
         if not ch:
             ch = last_chapter
         else:
+            if ch != last_chapter:
+                last_lesson = ""
             last_chapter = ch
 
         if not le:
-            le = "General"
-            warnings.append(f"Hàng {r}: Thiếu Lesson → dùng mặc định 'General'")
+            if last_lesson:
+                le = last_lesson
+            else:
+                le = "General"
+                warnings.append(f"Hàng {r}: Thiếu Lesson → dùng mặc định 'General'")
+                last_lesson = le
+        else:
+            last_lesson = le
 
         unit_title = un or (ct or sl or yt or "").split("/")[-1] or "Unit"
 
@@ -269,6 +278,7 @@ async def import_outline_excel(file: UploadFile = File(...)):
             rows: List[Dict[str, str]] = []
             warnings: List[str] = []
             last_chapter = ""
+            last_lesson = ""
             for idx, r in enumerate(reader, start=2):
                 ch = (r.get('Chapter') or '').strip()
                 le = (r.get('Lesson') or '').strip()
@@ -292,10 +302,18 @@ async def import_outline_excel(file: UploadFile = File(...)):
                 if not ch:
                     ch = last_chapter
                 else:
+                    if ch != last_chapter:
+                        last_lesson = ""
                     last_chapter = ch
                 if not le:
-                    le = 'General'
-                    warnings.append(f"Hàng {idx}: Thiếu Lesson → dùng mặc định 'General'")
+                    if last_lesson:
+                        le = last_lesson
+                    else:
+                        le = 'General'
+                        warnings.append(f"Hàng {idx}: Thiếu Lesson → dùng mặc định 'General'")
+                        last_lesson = le
+                else:
+                    last_lesson = le
                 unit_title = un or (ct or sl or yt or "").split("/")[-1] or "Unit"
                 rows.append({
                     "Chapter": ch,
@@ -458,7 +476,7 @@ def generate_outline_template_excel(settings=None) -> BytesIO:
         ("", normal_font),
         ("1. CÁC CỘT TRONG FILE OUTLINE (SHEET 'MẪU')", section_font),
         ("• Chapter (Bắt buộc): Tên chương / section. Nếu để trống, hệ thống sẽ lấy theo Chapter của dòng gần nhất phía trên.", normal_font),
-        ("• Lesson (Bắt buộc): Tên bài học / subsection. Nếu để trống, hệ thống sẽ tự động gán vào 'General'.", normal_font),
+        ("• Lesson (Bắt buộc): Tên bài học / subsection. Nếu để trống, hệ thống sẽ tự động lấy theo Lesson gần nhất trong cùng Chapter (nếu dòng đầu tiên của Chapter không có thì gán vào 'General').", normal_font),
         ("• Unit (Bắt buộc): Tên đơn vị học liệu / unit hiển thị trên cây khóa học.", normal_font),
         ("• Type (Tùy chọn): Xác định loại học liệu. Xem chi tiết các giá trị hợp lệ ở mục 2 bên dưới.", normal_font),
         ("• Content (Tùy chọn): Tên file tài nguyên (PDF/MP3), URL video/YouTube, URL/mã iframe nhúng, hoặc nội dung text/HTML.", normal_font),

@@ -289,7 +289,7 @@ export default function CourseGeneratorTool() {
                     <b>Gộp unit:</b> Các dòng trùng bộ <i>Chapter + Lesson + Unit</i> sẽ được tự động hợp nhất vào 1 unit (ví dụ dòng 1 có YouTube, dòng 2 có Slide).
                   </li>
                   <li>
-                    <b>Kế thừa &amp; giá trị mặc định:</b> <b>Chapter trống</b> sẽ tự động lấy theo Chapter gần nhất bên trên. <b>Thiếu Lesson</b> sẽ tự động dùng mặc định &quot;General&quot; kèm cảnh báo trong preview.
+                    <b>Kế thừa &amp; giá trị mặc định:</b> <b>Chapter hoặc Lesson trống</b> sẽ tự động lấy theo Chapter / Lesson gần nhất bên trên trong cùng chương. Chỉ khi dòng đầu tiên của Chapter thiếu Lesson thì mới mặc định &quot;General&quot;.
                   </li>
                   <li>
                     <b>Định dạng file:</b>

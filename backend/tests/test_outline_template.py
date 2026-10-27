@@ -242,3 +242,84 @@ async def test_invalid_type_error_message_contains_hint_csv():
     assert "file mẫu" in res.message.lower()
     for supported in SUPPORTED_UNIT_TYPES:
         assert supported in res.message, f"Thông báo lỗi cần liệt kê type '{supported}'"
+
+
+# ===========================================================================
+# Forward-Fill Lesson (Kế thừa Lesson trống trong cùng Chapter)
+# ===========================================================================
+
+@pytest.mark.anyio
+async def test_forward_fill_lesson_and_chapter_xlsx():
+    """Khi để trống ô Chapter và/hoặc Lesson ở các dòng tiếp theo (như ảnh người dùng cung cấp),
+    hệ thống phải tự động kế thừa Lesson gần nhất trong cùng Chapter,
+    KHÔNG sinh subsection 'General' và KHÔNG sinh warning."""
+    headers = ["Chapter", "Lesson", "Unit", "Type", "Content"]
+    rows = [
+        ["Chương 1: Mở đầu", "Bài 1.1: Giới thiệu chung", "1.1.1 Video giới thiệu tổng quan", "video", "https://youtu.be/a"],
+        ["", "", "1.1.2 Tài liệu hướng dẫn học tập", "pdf", "tailieu.pdf"],
+        ["", "Bài 1.2: Luyện nghe và phát âm", "1.2.1 Bài nghe hội thoại mẫu", "audio", "nghe.mp3"],
+        ["", "", "1.2.2 Tóm tắt", "text", "<p>Tom tat</p>"],
+        ["Chương 2: Kiến thức trọng tâm", "Bài 2.1: Lý thuyết căn bản", "2.1.1 Bài giảng lý thuyết kèm slide", "video_pdf", "https://youtu.be/b"],
+        ["", "Bài 2.2: Tài liệu tương tác trực tuyến", "2.2.1 Tài liệu nhúng Google Drive", "embed", "https://drive.google.com/test"],
+        ["Chương 3: Tổng kết & Ôn tập", "Bài 3.1: Hướng dẫn ôn tập", "3.1.1 Tóm tắt kiến thức cốt lõi", "text", "<p>Cot loi</p>"],
+        ["", "Bài 3.1: Hướng dẫn ôn tập", "3.1.2 Tài liệu tham khảo bổ sung", "pdf", "thamkhao.pdf"],
+    ]
+    buf = _create_xlsx_bytes(headers, rows)
+    upload = UploadFile(filename="fill_down_sample.xlsx", file=buf)
+    res = await import_outline_excel(upload)
+
+    assert res.success is True
+    assert len(res.warnings) == 0, f"Không được có cảnh báo thiếu Lesson: {res.warnings}"
+
+    chapters = res.outline["outline"]
+    assert len(chapters) == 3
+
+    # Chương 1 phải có đúng 2 bài (1.1 và 1.2), không có bài 'General'
+    c1_subs = chapters[0]["subsections"]
+    assert len(c1_subs) == 2
+    assert c1_subs[0]["title"] == "Bài 1.1: Giới thiệu chung"
+    assert len(c1_subs[0]["units"]) == 2
+    assert c1_subs[0]["units"][0]["title"] == "1.1.1 Video giới thiệu tổng quan"
+    assert c1_subs[0]["units"][1]["title"] == "1.1.2 Tài liệu hướng dẫn học tập"
+
+    assert c1_subs[1]["title"] == "Bài 1.2: Luyện nghe và phát âm"
+    assert len(c1_subs[1]["units"]) == 2
+    assert c1_subs[1]["units"][0]["title"] == "1.2.1 Bài nghe hội thoại mẫu"
+    assert c1_subs[1]["units"][1]["title"] == "1.2.2 Tóm tắt"
+
+    # Chương 2 phải có 2 bài (2.1 và 2.2)
+    c2_subs = chapters[1]["subsections"]
+    assert len(c2_subs) == 2
+    assert c2_subs[0]["title"] == "Bài 2.1: Lý thuyết căn bản"
+    assert len(c2_subs[0]["units"]) == 1
+    assert c2_subs[1]["title"] == "Bài 2.2: Tài liệu tương tác trực tuyến"
+    assert len(c2_subs[1]["units"]) == 1
+
+    # Chương 3 phải có 1 bài (3.1) chứa cả 2 unit
+    c3_subs = chapters[2]["subsections"]
+    assert len(c3_subs) == 1
+    assert c3_subs[0]["title"] == "Bài 3.1: Hướng dẫn ôn tập"
+    assert len(c3_subs[0]["units"]) == 2
+
+
+@pytest.mark.anyio
+async def test_forward_fill_lesson_and_chapter_csv():
+    """Kiểm tra tính năng kế thừa Lesson trống cho cả file CSV."""
+    csv_content = (
+        "Chapter,Lesson,Unit,Type,Content\n"
+        "Chương 1,Bài 1,Unit 1.1,video,https://youtu.be/a\n"
+        ",,Unit 1.2,pdf,slide.pdf\n"
+        ",Bài 2,Unit 2.1,text,<p>A</p>\n"
+        ",,Unit 2.2,text,<p>B</p>\n"
+    ).encode("utf-8")
+    upload = UploadFile(filename="fill_down.csv", file=BytesIO(csv_content))
+    res = await import_outline_excel(upload)
+
+    assert res.success is True
+    assert len(res.warnings) == 0
+    subs = res.outline["outline"][0]["subsections"]
+    assert len(subs) == 2
+    assert subs[0]["title"] == "Bài 1"
+    assert len(subs[0]["units"]) == 2
+    assert subs[1]["title"] == "Bài 2"
+    assert len(subs[1]["units"]) == 2
