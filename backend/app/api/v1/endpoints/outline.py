@@ -1,12 +1,13 @@
 """
 Outline import endpoints (Excel)
 """
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, Response
 from typing import Dict, Any, List, Tuple
 from io import BytesIO, StringIO
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 import csv
 from app.models.schemas.responses import OutlineImportResponse
+from app.config.settings import get_settings
 
 
 router = APIRouter()
@@ -16,6 +17,15 @@ REQUIRED_HEADERS = ["Chapter", "Lesson", "Unit"]
 OPTIONAL_HEADERS = ["Slide", "Youtube", "Type", "Content"]
 ALL_KNOWN_HEADERS = REQUIRED_HEADERS + OPTIONAL_HEADERS
 EXPECTED_HEADERS = REQUIRED_HEADERS + ["Slide", "Youtube"]  # Backward compatibility
+TEMPLATE_HEADERS = ["Chapter", "Lesson", "Unit", "Type", "Content", "Slide", "Youtube"]
+
+SUPPORTED_UNIT_TYPES = ["video", "pdf", "audio", "video_pdf", "embed", "text"]
+TYPE_ALIASES = {
+    "raw_html": "embed",
+    "html_raw": "embed",
+    "iframe": "embed",
+    "html": "text",
+}
 
 
 def _header_index(sheet) -> Dict[str, int]:
@@ -277,3 +287,192 @@ async def import_outline_excel(file: UploadFile = File(...)):
         return OutlineImportResponse(success=False, outline={"outline": []}, rows=[], warnings=[], message=f"Import thất bại: {str(e)}")
 
 
+
+
+def generate_outline_template_excel(settings=None) -> BytesIO:
+    """Generate Excel outline template in memory with 2 sheets: 'Mẫu' and 'Hướng dẫn'."""
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    if settings is None:
+        settings = get_settings()
+
+    wb = Workbook()
+
+    # ---------------------------------------------------------
+    # Sheet 1: Mẫu
+    # ---------------------------------------------------------
+    ws_mau = wb.active
+    ws_mau.title = "Mẫu"
+
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="1F497D", end_color="1F497D", fill_type="solid")
+    center_align = Alignment(horizontal="center", vertical="center")
+    thin_border = Border(
+        left=Side(style="thin", color="D9D9D9"),
+        right=Side(style="thin", color="D9D9D9"),
+        top=Side(style="thin", color="D9D9D9"),
+        bottom=Side(style="thin", color="D9D9D9"),
+    )
+
+    ws_mau.append(TEMPLATE_HEADERS)
+    for col_idx in range(1, len(TEMPLATE_HEADERS) + 1):
+        cell = ws_mau.cell(row=1, column=col_idx)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center_align
+
+    # Dummy sample rows covering every supported type + auto-detect
+    sample_data = [
+        # 1. video
+        [
+            "Chương 1: Mở đầu",
+            "Bài 1.1: Giới thiệu chung",
+            "1.1.1 Video giới thiệu tổng quan",
+            "video",
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "",
+            "",
+        ],
+        # 2. pdf
+        [
+            "Chương 1: Mở đầu",
+            "Bài 1.1: Giới thiệu chung",
+            "1.1.2 Tài liệu hướng dẫn học tập",
+            "pdf",
+            "huong_dan_hoc_tap.pdf",
+            "",
+            "",
+        ],
+        # 3. audio
+        [
+            "Chương 1: Mở đầu",
+            "Bài 1.2: Luyện nghe và phát âm",
+            "1.2.1 Bài nghe hội thoại mẫu",
+            "audio",
+            "audio_bai_01.mp3",
+            "",
+            "",
+        ],
+        # 4. video_pdf
+        [
+            "Chương 2: Kiến thức trọng tâm",
+            "Bài 2.1: Lý thuyết căn bản",
+            "2.1.1 Bài giảng lý thuyết kèm slide",
+            "video_pdf",
+            "",
+            "slide_ly_thuyet_bai_2.pdf",
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        ],
+        # 5. embed
+        [
+            "Chương 2: Kiến thức trọng tâm",
+            "Bài 2.2: Tài liệu tương tác trực tuyến",
+            "2.2.1 Tài liệu nhúng Google Drive",
+            "embed",
+            "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/preview",
+            "",
+            "",
+        ],
+        # 6. text
+        [
+            "Chương 3: Tổng kết & Ôn tập",
+            "Bài 3.1: Hướng dẫn ôn tập",
+            "3.1.1 Tóm tắt kiến thức cốt lõi",
+            "text",
+            "<p>Bài học dạng văn bản HTML tóm tắt các điểm quan trọng trong khóa học.</p>",
+            "",
+            "",
+        ],
+        # 7. Auto-detect row (Type trống, điền Slide)
+        [
+            "Chương 3: Tổng kết & Ôn tập",
+            "Bài 3.1: Hướng dẫn ôn tập",
+            "3.1.2 Tài liệu tham khảo bổ sung",
+            "",
+            "",
+            "tai_lieu_tham_khao.pdf",
+            "",
+        ],
+    ]
+
+    for row in sample_data:
+        ws_mau.append(row)
+
+    for row in ws_mau.iter_rows(min_row=2, max_row=len(sample_data) + 1, min_col=1, max_col=len(TEMPLATE_HEADERS)):
+        for cell in row:
+            cell.border = thin_border
+            cell.alignment = Alignment(vertical="center")
+
+    for col in ws_mau.columns:
+        max_len = max(len(str(cell.value or "")) for cell in col)
+        col_letter = col[0].column_letter
+        ws_mau.column_dimensions[col_letter].width = max(max_len + 4, 15)
+
+    # ---------------------------------------------------------
+    # Sheet 2: Hướng dẫn
+    # ---------------------------------------------------------
+    ws_guide = wb.create_sheet(title="Hướng dẫn")
+    guide_title_font = Font(name="Calibri", size=13, bold=True, color="1F497D")
+    section_font = Font(name="Calibri", size=11, bold=True)
+    normal_font = Font(name="Calibri", size=10)
+
+    max_mb = settings.file.max_file_size // (1024 * 1024)
+
+    guide_content = [
+        ("HƯỚNG DẪN ĐỊNH DẠNG FILE OUTLINE KHÓA HỌC", guide_title_font),
+        ("", normal_font),
+        ("1. CÁC CỘT TRONG FILE OUTLINE (SHEET 'MẪU')", section_font),
+        ("• Chapter (Bắt buộc): Tên chương / section. Nếu để trống, hệ thống sẽ lấy theo Chapter của dòng gần nhất phía trên.", normal_font),
+        ("• Lesson (Bắt buộc): Tên bài học / subsection. Nếu để trống, hệ thống sẽ tự động gán vào 'General'.", normal_font),
+        ("• Unit (Bắt buộc): Tên đơn vị học liệu / unit hiển thị trên cây khóa học.", normal_font),
+        ("• Type (Tùy chọn): Xác định loại học liệu. Xem chi tiết các giá trị hợp lệ ở mục 2 bên dưới.", normal_font),
+        ("• Content (Tùy chọn): Tên file tài nguyên (PDF/MP3), URL video/YouTube, URL/mã iframe nhúng, hoặc nội dung text/HTML.", normal_font),
+        ("• Slide (Tùy chọn - Cột cũ): Tên file slide PDF. Hệ thống hỗ trợ 100% tương thích ngược khi không có cột Type.", normal_font),
+        ("• Youtube (Tùy chọn - Cột cũ): URL video YouTube. Hệ thống hỗ trợ 100% tương thích ngược khi không có cột Type.", normal_font),
+        ("", normal_font),
+        ("2. CÁC LOẠI UNIT HỢP LỆ (CỘT 'TYPE')", section_font),
+        ("• video: Video bài giảng. Cột Content điền link YouTube hoặc link video trực tiếp.", normal_font),
+        ("• pdf: Tài liệu bài giảng PDF. Cột Content điền tên file PDF (ví dụ: bai1.pdf). Upload file ở mục 'Chọn files PDF / Audio'.", normal_font),
+        ("• audio: Bài giảng âm thanh MP3. Cột Content điền tên file audio (ví dụ: bai1.mp3). Upload file ở mục 'Chọn files PDF / Audio'.", normal_font),
+        ("• video_pdf: Bài giảng tích hợp video và slide PDF. Có thể khai báo đồng thời video và slide tương ứng.", normal_font),
+        ("• embed: Nhúng tài liệu ngoài (Google Drive, OneDrive, SharePoint, Stream). Cột Content dán link chia sẻ hoặc mã <iframe>.", normal_font),
+        ("• text: Bài giảng văn bản hoặc mã HTML trực tiếp trong cột Content.", normal_font),
+        ("", normal_font),
+        ("3. QUY TẮC ĐẶT TÊN FILE TÀI NGUYÊN (THEO TÀI LIỆU HƯỚNG DẪN MỤC 3.4.2)", section_font),
+        ("• Tên file PDF và MP3 cần ngắn gọn, viết liền không dấu, không chứa khoảng trắng và không chứa ký tự đặc biệt.", normal_font),
+        ("• Ví dụ đúng: bai_01_slide.pdf, audio_unit_02.mp3, chuong1_bai1.pdf.", normal_font),
+        ("• Ví dụ sai: Bài 1 Slide.pdf, nghe bài 1.mp3, bai#1@test.pdf.", normal_font),
+        ("", normal_font),
+        ("4. GIỚI HẠN KÍCH THƯỚC VÀ ĐÓNG GÓI TÀI NGUYÊN", section_font),
+        (f"• Giới hạn kích thước file tải lên tối đa là {max_mb}MB (theo cấu hình hệ thống).", normal_font),
+        ("• Các file PDF và MP3 có tên trong outline cần được chọn tải lên ở mục '2. Upload folder PDF slides / Audio' trên giao diện.", normal_font),
+        ("", normal_font),
+        ("5. GHI CHÚ VỀ TÍNH TƯƠNG THÍCH NGƯỢC", section_font),
+        ("• Các file Excel hoặc CSV cũ chỉ có 5 cột (Chapter, Lesson, Unit, Slide, Youtube) vẫn được hỗ trợ đầy đủ 100%.", normal_font),
+        ("• Nếu cột Type để trống nhưng có điền Slide hoặc Youtube, hệ thống sẽ tự động nhận diện thành pdf, video hoặc video_pdf.", normal_font),
+    ]
+
+    for text, font in guide_content:
+        ws_guide.append([text])
+        cell = ws_guide.cell(row=ws_guide.max_row, column=1)
+        cell.font = font
+
+    ws_guide.column_dimensions["A"].width = 110
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+
+@router.get("/template")
+async def download_outline_template():
+    """Download standard Excel template for course outline."""
+    buffer = generate_outline_template_excel()
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": 'attachment; filename="outline_template.xlsx"'
+        }
+    )
