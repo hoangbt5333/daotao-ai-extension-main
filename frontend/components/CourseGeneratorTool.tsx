@@ -8,6 +8,8 @@ import TableCell from "@mui/material/TableCell";
 import EditableOutlineTree, { OutlineData } from "./EditableOutlineTree";
 import FolderIcon from '@mui/icons-material/Folder';
 import UploadIcon from '@mui/icons-material/Upload';
+import DownloadIcon from '@mui/icons-material/Download';
+import { getApiUrl, API_ENDPOINTS } from "../config/api";
 
 const steps = [
   "Nhập outline",
@@ -38,6 +40,17 @@ export default function CourseGeneratorTool() {
 
   const BACKEND = "http://localhost:8000";
 
+  // Download outline template Excel
+  const handleDownloadTemplate = () => {
+    const url = getApiUrl(API_ENDPOINTS.OUTLINE_TEMPLATE);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "outline_template.xlsx");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Step 1: Import outline (Excel/CSV)
   const handleExcelPreview = async () => {
     if (!excelFile) {
@@ -48,7 +61,7 @@ export default function CourseGeneratorTool() {
     try {
       const formData = new FormData();
       formData.append("file", excelFile);
-      const res = await fetch(`${BACKEND}/api/v1/outline/import-excel`, { method: "POST", body: formData });
+      const res = await fetch(getApiUrl(API_ENDPOINTS.OUTLINE_IMPORT), { method: "POST", body: formData });
       const raw = await res.text();
       let data: any;
       try {
@@ -110,7 +123,7 @@ export default function CourseGeneratorTool() {
 
       console.log("Sending outline to backend:", outline);
 
-      const res = await fetch(`${BACKEND}/api/v1/mapping/pdfs`, {
+      const res = await fetch(getApiUrl(API_ENDPOINTS.MAPPING_PDFS), {
         method: "POST",
         body: formData,
       });
@@ -152,7 +165,7 @@ export default function CourseGeneratorTool() {
       });
       formData.append("outline", JSON.stringify(outline));
       formData.append("questions", JSON.stringify(questions));
-      const res = await fetch(`${BACKEND}/api/v1/export/?filename=${encodeURIComponent(exportFilename)}`, {
+      const res = await fetch(getApiUrl(`${API_ENDPOINTS.EXPORT}?filename=${encodeURIComponent(exportFilename)}`), {
         method: "POST",
         body: formData,
       });
@@ -209,13 +222,25 @@ export default function CourseGeneratorTool() {
         <>
           <Paper sx={{ p: 2, mb: 3 }}>
             <Typography variant="h6" mb={2}>1. Import outline từ Excel/CSV</Typography>
-            <input
-              type="file"
-              accept=".xlsx,.csv"
-              onChange={e => setExcelFile(e.target.files?.[0] || null)}
-              style={{ marginRight: 12 }}
-            />
-            <Button variant="outlined" onClick={handleExcelPreview} disabled={loading || !excelFile}>Xem preview</Button>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+              <input
+                type="file"
+                accept=".xlsx,.csv"
+                onChange={e => setExcelFile(e.target.files?.[0] || null)}
+                style={{ marginRight: 12 }}
+              />
+              <Button variant="outlined" onClick={handleExcelPreview} disabled={loading || !excelFile}>
+                Xem preview
+              </Button>
+              <Button
+                variant="outlined"
+                color="primary"
+                startIcon={<DownloadIcon />}
+                onClick={handleDownloadTemplate}
+              >
+                Tải file mẫu
+              </Button>
+            </Box>
 
             <Box sx={{ mt: 2 }}>
               <Alert severity="info">
@@ -425,7 +450,7 @@ export default function CourseGeneratorTool() {
             {tarFile ? (
               <>
                 <Typography>File .tar.gz đã sẵn sàng:</Typography>
-                <a href={`http://localhost:8000${tarFile}`} download>
+                <a href={getApiUrl(tarFile)} download>
                   <Button variant="contained" sx={{ mt: 1 }}>Tải về {exportFilename}.tar.gz</Button>
                 </a>
                 <Typography variant="body2" sx={{ mt: 2, whiteSpace: 'pre-line' }}>{conversionLog}</Typography>

@@ -17,6 +17,10 @@ export const API_ENDPOINTS = {
   ANALYZE: `${API_CONFIG.API_BASE_PATH}/analyze/`,
   MAPPING_PDFS: `${API_CONFIG.API_BASE_PATH}/mapping/pdfs`,
   
+  // Outline endpoints
+  OUTLINE_IMPORT: `${API_CONFIG.API_BASE_PATH}/outline/import-excel`,
+  OUTLINE_TEMPLATE: `${API_CONFIG.API_BASE_PATH}/outline/template`,
+  
   // Question Processing
   QUESTIONS_PROCESS: `${API_CONFIG.API_BASE_PATH}/questions/process`,
   QUESTIONS_FROM_LIBRARY: `${API_CONFIG.API_BASE_PATH}/questions/from-library`,
