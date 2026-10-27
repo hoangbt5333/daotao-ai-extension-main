@@ -45,8 +45,20 @@ def _header_index(sheet) -> Dict[str, int]:
             idx[v] = c
     missing = [h for h in REQUIRED_HEADERS if h not in idx]
     if missing:
-        raise ValueError(f"Thiếu cột bắt buộc: {', '.join(missing)}")
+        raise ValueError(f"Thiếu cột bắt buộc: {', '.join(missing)}. Vui lòng xem file mẫu để kiểm tra danh sách cột chuẩn.")
     return {"row": header_row, **idx}
+
+
+def _validate_type(tp: str, row_idx: int) -> None:
+    """Validate that unit type is in SUPPORTED_UNIT_TYPES or TYPE_ALIASES."""
+    if tp:
+        tp_norm = tp.lower()
+        if tp_norm not in SUPPORTED_UNIT_TYPES and tp_norm not in TYPE_ALIASES:
+            raise ValueError(
+                f"Hàng {row_idx}: Giá trị Type '{tp}' không hợp lệ. "
+                f"Các Type được hỗ trợ: {', '.join(SUPPORTED_UNIT_TYPES)}. "
+                f"Vui lòng xem file mẫu để biết định dạng chuẩn."
+            )
 
 
 def _merged_top_left_map(sheet) -> Dict[Tuple[int, int], Tuple[int, int]]:
@@ -85,6 +97,9 @@ def _normalize_rows(sheet) -> (List[Dict[str, str]], List[str]):
         yt = _get_cell_value(sheet, r, idx["Youtube"], merged_map).strip() if "Youtube" in idx else ""
         tp = _get_cell_value(sheet, r, idx["Type"], merged_map).strip() if "Type" in idx else ""
         ct = _get_cell_value(sheet, r, idx["Content"], merged_map).strip() if "Content" in idx else ""
+
+        if tp:
+            _validate_type(tp, r)
 
         if not ch:
             ch = last_chapter
@@ -157,6 +172,8 @@ def _build_outline(rows: List[Dict[str, str]]) -> Dict[str, Any]:
         # Logic ưu tiên: nếu có cột Type và ô Type không rỗng
         if tp:
             tp_norm = tp.lower()
+            if tp_norm in TYPE_ALIASES:
+                tp_norm = TYPE_ALIASES[tp_norm]
             if tp_norm == "audio":
                 u["type"] = "audio"
                 target_file = ct or sl
@@ -242,7 +259,13 @@ async def import_outline_excel(file: UploadFile = File(...)):
             # Validate required headers by inclusion, not strict order
             missing = [h for h in REQUIRED_HEADERS if h not in headers]
             if missing:
-                return OutlineImportResponse(success=False, outline={"outline": []}, rows=[], warnings=[], message=f"Thiếu cột bắt buộc: {', '.join(missing)}")
+                return OutlineImportResponse(
+                    success=False,
+                    outline={"outline": []},
+                    rows=[],
+                    warnings=[],
+                    message=f"Thiếu cột bắt buộc: {', '.join(missing)}. Vui lòng xem file mẫu để kiểm tra danh sách cột chuẩn."
+                )
             rows: List[Dict[str, str]] = []
             warnings: List[str] = []
             last_chapter = ""
@@ -254,6 +277,18 @@ async def import_outline_excel(file: UploadFile = File(...)):
                 yt = (r.get('Youtube') or '').strip()
                 tp = (r.get('Type') or '').strip()
                 ct = (r.get('Content') or '').strip()
+
+                if tp:
+                    try:
+                        _validate_type(tp, idx)
+                    except ValueError as e:
+                        return OutlineImportResponse(
+                            success=False,
+                            outline={"outline": []},
+                            rows=[],
+                            warnings=[],
+                            message=str(e)
+                        )
                 if not ch:
                     ch = last_chapter
                 else:

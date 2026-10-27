@@ -117,3 +117,128 @@ async def test_template_file_imports_cleanly():
     unit_types = {u.get("type") for u in all_units}
     for expected_type in SUPPORTED_UNIT_TYPES:
         assert expected_type in unit_types, f"Unit type '{expected_type}' không được tạo đúng sau khi import"
+
+
+# ===========================================================================
+# Task 2 Tests: Backward Compatibility & Error Message Hints
+# ===========================================================================
+
+def _create_xlsx_bytes(headers: list, rows: list) -> BytesIO:
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Outline"
+    ws.append(headers)
+    for row in rows:
+        ws.append(row)
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+@pytest.mark.anyio
+async def test_legacy_5_columns_compatibility_xlsx():
+    """File Excel cũ chỉ có 5 cột (Chapter, Lesson, Unit, Slide, Youtube)
+    vẫn hoạt động đúng, tự động phân loại video/pdf/video_pdf."""
+    headers = ["Chapter", "Lesson", "Unit", "Slide", "Youtube"]
+    rows = [
+        ["Chương 1", "Bài 1", "Unit Video", "", "https://youtu.be/abc"],
+        ["Chương 1", "Bài 1", "Unit Slide", "bai1.pdf", ""],
+        ["Chương 1", "Bài 1", "Unit VideoSlide", "bai1.pdf", "https://youtu.be/abc"],
+        ["Chương 1", "Bài 1", "Unit Empty", "", ""],
+    ]
+    buf = _create_xlsx_bytes(headers, rows)
+    upload = UploadFile(filename="legacy_5_columns.xlsx", file=buf)
+    res = await import_outline_excel(upload)
+
+    assert res.success is True
+    units = res.outline["outline"][0]["subsections"][0]["units"]
+    assert len(units) == 4
+    assert units[0]["type"] == "video"
+    assert units[1]["type"] == "pdf"
+    assert units[2]["type"] == "video_pdf"
+
+
+@pytest.mark.anyio
+async def test_legacy_5_columns_compatibility_csv():
+    """File CSV cũ 5 cột vẫn hoạt động tương thích ngược 100%."""
+    csv_content = (
+        "Chapter,Lesson,Unit,Slide,Youtube\n"
+        "Chương 1,Bài 1,Unit Video,,https://youtu.be/abc\n"
+        "Chương 1,Bài 1,Unit Slide,bai1.pdf,\n"
+    ).encode("utf-8")
+    upload = UploadFile(filename="legacy.csv", file=BytesIO(csv_content))
+    res = await import_outline_excel(upload)
+
+    assert res.success is True
+    units = res.outline["outline"][0]["subsections"][0]["units"]
+    assert units[0]["type"] == "video"
+    assert units[1]["type"] == "pdf"
+
+
+@pytest.mark.anyio
+async def test_missing_required_headers_contains_hint_xlsx():
+    """Khi thiếu cột bắt buộc trong .xlsx, thông báo lỗi phải nêu rõ cột thiếu
+    và kèm gợi ý xem file mẫu."""
+    # Thiếu cột Unit
+    headers = ["Chapter", "Lesson", "Slide", "Youtube"]
+    rows = [["Chương 1", "Bài 1", "bai1.pdf", ""]]
+    buf = _create_xlsx_bytes(headers, rows)
+    upload = UploadFile(filename="missing_header.xlsx", file=buf)
+    res = await import_outline_excel(upload)
+
+    assert res.success is False
+    assert "Thiếu cột bắt buộc" in res.message
+    assert "Unit" in res.message
+    assert "file mẫu" in res.message.lower()
+
+
+@pytest.mark.anyio
+async def test_missing_required_headers_contains_hint_csv():
+    """Khi thiếu cột bắt buộc trong .csv, thông báo lỗi phải nêu rõ cột thiếu
+    và kèm gợi ý xem file mẫu."""
+    csv_content = "Chapter,Slide,Youtube\nChương 1,bai1.pdf,\n".encode("utf-8")
+    upload = UploadFile(filename="missing_header.csv", file=BytesIO(csv_content))
+    res = await import_outline_excel(upload)
+
+    assert res.success is False
+    assert "Thiếu cột bắt buộc" in res.message
+    assert "file mẫu" in res.message.lower()
+
+
+@pytest.mark.anyio
+async def test_invalid_type_error_message_contains_hint_xlsx():
+    """Khi giá trị cột Type trong file .xlsx không hợp lệ, thông báo lỗi phải chỉ rõ
+    hàng vi phạm, giá trị sai, gợi ý xem file mẫu và liệt kê các Type hợp lệ."""
+    headers = ["Chapter", "Lesson", "Unit", "Type", "Content"]
+    rows = [
+        ["Chương 1", "Bài 1", "Unit 1", "invalid_unit_type", "some_content"]
+    ]
+    buf = _create_xlsx_bytes(headers, rows)
+    upload = UploadFile(filename="invalid_type.xlsx", file=buf)
+    res = await import_outline_excel(upload)
+
+    assert res.success is False
+    assert "invalid_unit_type" in res.message
+    assert "file mẫu" in res.message.lower()
+    for supported in SUPPORTED_UNIT_TYPES:
+        assert supported in res.message, f"Thông báo lỗi cần liệt kê type '{supported}'"
+
+
+@pytest.mark.anyio
+async def test_invalid_type_error_message_contains_hint_csv():
+    """Khi giá trị cột Type trong file .csv không hợp lệ, thông báo lỗi phải chỉ rõ
+    hàng vi phạm, giá trị sai, gợi ý xem file mẫu và liệt kê các Type hợp lệ."""
+    csv_content = (
+        "Chapter,Lesson,Unit,Type,Content\n"
+        "Chương 1,Bài 1,Unit 1,bad_type_xyz,some_content\n"
+    ).encode("utf-8")
+    upload = UploadFile(filename="invalid_type.csv", file=BytesIO(csv_content))
+    res = await import_outline_excel(upload)
+
+    assert res.success is False
+    assert "bad_type_xyz" in res.message
+    assert "file mẫu" in res.message.lower()
+    for supported in SUPPORTED_UNIT_TYPES:
+        assert supported in res.message, f"Thông báo lỗi cần liệt kê type '{supported}'"
