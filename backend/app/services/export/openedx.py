@@ -11,6 +11,7 @@ import xml.etree.ElementTree as ET
 from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse, parse_qs
 from app.services.export.base import Exporter
+from app.services.export.helpers import resolve_question_display_name
 from app.core.logging import get_logger
 
 
@@ -499,22 +500,30 @@ class OpenEdXExporter(Exporter):
     def _create_problems_from_questions(self, questions: List[Dict[str, Any]], course_dir: str):
         """Create problem XML files from questions"""
         if questions:
+            used_names = {}
             # Group questions into problem sets (e.g., 10 questions per problem)
             questions_per_problem = 10
-            for i in range(0, len(questions), questions_per_problem):
+            for chunk_idx, i in enumerate(range(0, len(questions), questions_per_problem)):
                 problem_id = self._generate_uuid()
                 
                 problem_questions = questions[i:i + questions_per_problem]
                 problem_data = {"questions": problem_questions}
-                
-                problem_xml = self._create_problem_xml(problem_data)
+                if len(problem_questions) == 1 and problem_questions[0].get("name"):
+                    problem_data["name"] = problem_questions[0].get("name")
+                elif problem_questions and problem_questions[0].get("name"):
+                    problem_data["name"] = problem_questions[0].get("name")
+
+                display_name = resolve_question_display_name(problem_data, chunk_idx, used_names)
+                problem_xml = self._create_problem_xml(problem_data, display_name=display_name)
                 with open(os.path.join(course_dir, 'problem', f'{problem_id}.xml'), 'w', encoding='utf-8') as f:
                     f.write(problem_xml)
     
-    def _create_problem_xml(self, question_data: Dict[str, Any]) -> str:
+    def _create_problem_xml(self, question_data: Dict[str, Any], display_name: Optional[str] = None) -> str:
         """Create problem XML file with multiple choice questions"""
         problem_elem = ET.Element("problem")
-        problem_elem.set("display_name", "Multiple Choice")
+        if display_name is None:
+            display_name = resolve_question_display_name(question_data, 0, {})
+        problem_elem.set("display_name", display_name)
         
         # Add HTML structure for multiple choice
         html_content = "<p/>\n"

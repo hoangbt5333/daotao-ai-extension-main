@@ -11,6 +11,7 @@ import re
 from lxml import etree
 from typing import Dict, Any, List, Optional
 from app.services.export.base import Exporter
+from app.services.export.helpers import resolve_question_display_name
 from app.core.logging import get_logger
 
 
@@ -75,6 +76,7 @@ class LibraryExporter(Exporter):
         
         # Process questions and create problem files
         problem_ids = []
+        used_names = {}
         for i, question_data in enumerate(questions):
             question_id = self._generate_uuid()
             problem_ids.append(question_id)
@@ -83,8 +85,10 @@ class LibraryExporter(Exporter):
             if question_type == "multiple_select":
                 question_data["type"] = "multiple_select"
             
+            display_name = resolve_question_display_name(question_data, i, used_names)
+            
             # Create problem XML
-            problem_xml = self._create_problem_xml_for_library(question_data)
+            problem_xml = self._create_problem_xml_for_library(question_data, display_name=display_name)
             
             with open(os.path.join(library_root, 'problem', f'{question_id}.xml'), 'w', encoding='utf-8') as f:
                 f.write(problem_xml)
@@ -159,7 +163,7 @@ class LibraryExporter(Exporter):
         xml_bytes = etree.tostring(library_elem, encoding='utf-8', pretty_print=True, xml_declaration=False)
         return xml_bytes.decode('utf-8')
     
-    def _create_problem_xml_for_library(self, question_data: Dict[str, Any]) -> str:
+    def _create_problem_xml_for_library(self, question_data: Dict[str, Any], display_name: Optional[str] = None) -> str:
         """Create problem XML file for library"""
         tags_list = question_data.get('tags', [])
         if isinstance(tags_list, str):
@@ -169,7 +173,10 @@ class LibraryExporter(Exporter):
         question_type = question_data.get("type", "multiple_choice")
         question_text = question_data.get("question", "")
         
-        problem_elem = etree.Element("problem", display_name="Multiple Choice", tags=tags_json)
+        if display_name is None:
+            display_name = resolve_question_display_name(question_data, 0, {})
+
+        problem_elem = etree.Element("problem", display_name=display_name, tags=tags_json)
         
         # Create markdown content
         markdown_content = self._create_markdown_content(question_data)
