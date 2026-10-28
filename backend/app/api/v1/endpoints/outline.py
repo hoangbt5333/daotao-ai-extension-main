@@ -388,8 +388,8 @@ def generate_outline_template_excel(settings=None) -> BytesIO:
         ],
         # 2. pdf
         [
-            "Chương 1: Mở đầu",
-            "Bài 1.1: Giới thiệu chung",
+            "",
+            "",
             "1.1.2 Tài liệu hướng dẫn học tập",
             "pdf",
             "huong_dan_hoc_tap.pdf",
@@ -398,7 +398,7 @@ def generate_outline_template_excel(settings=None) -> BytesIO:
         ],
         # 3. audio
         [
-            "Chương 1: Mở đầu",
+            "",
             "Bài 1.2: Luyện nghe và phát âm",
             "1.2.1 Bài nghe hội thoại mẫu",
             "audio",
@@ -418,7 +418,7 @@ def generate_outline_template_excel(settings=None) -> BytesIO:
         ],
         # 5. embed
         [
-            "Chương 2: Kiến thức trọng tâm",
+            "",
             "Bài 2.2: Tài liệu tương tác trực tuyến",
             "2.2.1 Tài liệu nhúng Google Drive",
             "embed",
@@ -438,8 +438,8 @@ def generate_outline_template_excel(settings=None) -> BytesIO:
         ],
         # 7. Auto-detect row (Type trống, điền Slide)
         [
-            "Chương 3: Tổng kết & Ôn tập",
-            "Bài 3.1: Hướng dẫn ôn tập",
+            "",
+            "",
             "3.1.2 Tài liệu tham khảo bổ sung",
             "",
             "",
