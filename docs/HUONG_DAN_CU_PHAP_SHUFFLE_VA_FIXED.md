@@ -59,6 +59,15 @@ Trong Open edX Studio, khi giảng viên soạn thảo câu hỏi trắc nghiệ
     - Dòng 1 sinh ra là `() A` -> Mất dấu `!` kích hoạt shuffle của edX!
     - Dòng 3 sinh ra là `(!x) C.` -> Dấu `!` xuất hiện ở giữa câu hỏi khiến edX hiểu nhầm là phương án C bị ghim cố định, trong khi các phương án khác bị lệch hành vi xáo trộn.
 
+### Lỗi 3: XML problem luôn bị gán cứng `display_name="Multiple Choice"` (Không đặt được tên câu hỏi)
+- **Vị trí:**
+  - `backend/app/services/export/library.py` (dòng 172 cũ: `problem_elem = etree.Element("problem", display_name="Multiple Choice", ...)`)
+  - `backend/app/services/export/openedx.py` (dòng 517 cũ: `problem_elem.set("display_name", "Multiple Choice")`)
+- **Hiện tượng & Hậu quả:**
+  - Toàn bộ các câu hỏi khi xuất Library hoặc Course OLX đều bị fix cứng `display_name="Multiple Choice"` cho mọi loại câu hỏi (radio, checkbox/multiple_select, text_input, numerical).
+  - Tên này hiển thị ở tiêu đề thẻ (problem card) trong thư viện câu hỏi Open edX Studio và cả ở tiêu đề câu hỏi mà người học thấy trên LMS.
+  - Giáo viên không thể đặt tên gợi nhớ hoặc phân biệt các câu hỏi (ví dụ: `Cau-01`, `BaiTap-01`, `Quiz-01`).
+
 ---
 
 ## 3. Kế hoạch sửa chữa chi tiết
@@ -93,7 +102,26 @@ Trong Open edX Studio, khi giảng viên soạn thảo câu hỏi trắc nghiệ
    <choice correct="false" fixed="true">Tất cả đều sai</choice>
    ```
 
-### Bước 3: Kiểm thử toàn diện
+### Bước 3: Chuẩn hóa và tùy biến tên câu hỏi (`display_name`) cho mọi Exporter
+1. **Xây dựng hàm dùng chung `resolve_question_display_name` (`backend/app/services/export/helpers.py`):**
+   - **Tên tùy chọn:** Ưu tiên lấy từ trường `name` (hoặc `display_name`) do giáo viên đặt.
+   - **Tên dự phòng:** Nếu tên rỗng hoặc thiếu, tự động sinh tên chuẩn theo thứ tự 2 chữ số: `Cau-NN` (`Cau-01`, `Cau-02`,...).
+   - **Xử lý trùng lặp:** Nếu trong cùng lần xuất có câu trùng tên, tự động thêm hậu tố `_1`, `_2`... (`Cau-01_1`, `Cau-01_2`) mà không gây lỗi.
+   - **An toàn nội dung & XML:** Tuyệt đối không lấy tên từ nội dung đáp án. Hỗ trợ đầy đủ tiếng Việt có dấu và các ký tự đặc biệt XML (`&`, `<`, `>`, `"`) qua `lxml`.
+2. **Áp dụng đồng bộ cho Exporter:**
+   - `LibraryExporter` (`library.py`): Gán `display_name` cho thẻ `<problem>` trong từng file `library/problem/{uuid}.xml`.
+   - `OpenEdXExporter` (`openedx.py`): Gán `display_name` cho các problem block trong khóa học.
+3. **Mở rộng giao diện `QuestionBankTool.tsx`:**
+   - **Bước 1:** Thêm ô nhập tùy chọn *"Tiền tố tên câu hỏi"* (gợi ý mặc định `Cau`).
+   - **Chuyển Bước 2:** Tự động sinh tên `<tiền tố>-<số thứ tự 2 chữ số>` cho từng câu (ví dụ `Cau-01`, `Quiz-02`). Khi người dùng ở Bước 1 bấm xử lý lại, tên sẽ được sinh mới hoàn toàn.
+   - **Bước 2:** Hiển thị trực quan nhãn `[Tên-câu]` ngay trước nội dung mỗi câu trong danh sách.
+   - **Dialog Chỉnh sửa:** Thêm ô *"Tên câu hỏi (Display Name)"* đặt ngay trên ô *"Nội dung câu hỏi"*, cho phép giáo viên chỉnh sửa tùy ý.
+   - **Xuất Library:** Dữ liệu `name` được gửi kèm trong payload JSON sang backend để sinh `display_name` tương ứng.
+
+### Bước 4: Kiểm thử toàn diện
 1. Test Case 1: Đáp án đúng ở dòng đầu `(!x) A` -> Sinh Markdown chuẩn: dòng đầu `(!x)`, các dòng sau `( )`.
 2. Test Case 2: Đáp án đúng ở dòng 3 `(x) C`, dòng đầu `(!) A` -> Sinh Markdown chuẩn: dòng đầu `(!) A`, dòng 3 `(x) C`. Toàn bộ đều đảo ngẫu nhiên khi vào edX.
 3. Test Case 3: Có phương án cố định `(@)` ở cuối -> Sinh Markdown `(@)` và thẻ XML có `fixed="true"`.
+4. Test Case 4: Đặt tên câu hỏi với tiếng Việt có dấu, ký tự đặc biệt (`&`, `<`, `>`, `"`) -> Thẻ `<problem>` lưu đúng `display_name`, parse lại bằng `lxml` an toàn.
+5. Test Case 5: Tên câu hỏi bị rỗng -> Tự động fallback về `Cau-01`, `Cau-02`... theo thứ tự.
+6. Test Case 6: Trùng tên câu hỏi -> Tự động thêm hậu tố `_1`, `_2` mà không báo lỗi.
