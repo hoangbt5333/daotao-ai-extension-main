@@ -36,6 +36,7 @@ const steps = [
 ];
 
 interface Question {
+  name?: string;
   question: string;
   type: string;
   choices: string[];
@@ -49,6 +50,7 @@ interface Question {
 
 export default function QuestionBankTool() {
   const [activeStep, setActiveStep] = useState(0);
+  const [questionPrefix, setQuestionPrefix] = useState<string>("");
   const [questionsText, setQuestionsText] = useState("");
   const [userTags, setUserTags] = useState<string[]>([]);
   const [tagsInput, setTagsInput] = useState<string>("");
@@ -86,6 +88,7 @@ export default function QuestionBankTool() {
   // Tạo bộ câu hỏi mới (làm sạch dữ liệu và về bước 1)
   const handleCreateNew = () => {
     setQuestionsText("");
+    setQuestionPrefix("");
     setProcessedQuestions([]);
     setTotalQuestions(0);
     setTarFile(null);
@@ -133,9 +136,17 @@ export default function QuestionBankTool() {
       const data = await res.json();
       console.log("Response from process-questions:", data);
       if (data.success && data.questions) {
-        const questionsArray = Array.isArray(data.questions) ? data.questions : [];
-        setProcessedQuestions(questionsArray);
-        setTotalQuestions(questionsArray.length);
+        const questionsArray: Question[] = Array.isArray(data.questions) ? data.questions : [];
+        const prefix = questionPrefix.trim() || "Cau";
+        const questionsWithNames = questionsArray.map((q, idx) => {
+          const order = String(idx + 1).padStart(2, '0');
+          return {
+            ...q,
+            name: q.name && q.name.trim() ? q.name.trim() : `${prefix}-${order}`
+          };
+        });
+        setProcessedQuestions(questionsWithNames);
+        setTotalQuestions(questionsWithNames.length);
         setActiveStep(1);
       } else {
         console.error("Invalid response format:", data);
@@ -303,6 +314,15 @@ Câu hỏi có nhiều đáp án đúng?
             )}
           </Collapse>
           <TextField
+            label="Tiền tố tên câu hỏi (tùy chọn)"
+            fullWidth
+            value={questionPrefix}
+            onChange={e => setQuestionPrefix(e.target.value)}
+            placeholder="Ví dụ: Cau, BaiTap, Q (mặc định là Cau)"
+            helperText="Nếu để trống, tên câu hỏi sẽ tự động sinh dạng Cau-01, Cau-02..."
+            sx={{ mb: 2 }}
+          />
+          <TextField
             label="Nhập hoặc dán danh sách câu hỏi"
             multiline
             minRows={8}
@@ -409,7 +429,14 @@ Câu hỏi có nhiều đáp án đúng?
               processedQuestions.map((q, index) => (
                 <ListItem key={index} divider alignItems="flex-start">
                   <ListItemText
-                    primary={q.question || "Câu hỏi không có nội dung"}
+                    primary={
+                      <Box component="span">
+                        <strong style={{ color: '#1976d2', marginRight: 8 }}>
+                          [{q.name || `Cau-${String(index + 1).padStart(2, '0')}`}]
+                        </strong>
+                        {q.question || "Câu hỏi không có nội dung"}
+                      </Box>
+                    }
                     secondary={
                       <Box>
                         {/* Question type and choices */}
@@ -482,6 +509,15 @@ Câu hỏi có nhiều đáp án đúng?
                   <MenuItem value="numerical">Tự luận số (numerical)</MenuItem>
                 </Select>
               </FormControl>
+              <TextField
+                fullWidth
+                label="Tên câu hỏi (Display Name)"
+                value={editQuestion?.name || ''}
+                onChange={e => setEditQuestion(q => q ? { ...q, name: e.target.value } : q)}
+                placeholder="Ví dụ: Cau-01, BaiTap-01"
+                helperText="Tên hiển thị của câu hỏi trong Library / khóa học"
+                sx={{ mb: 2 }}
+              />
               <TextField
                 fullWidth
                 multiline
