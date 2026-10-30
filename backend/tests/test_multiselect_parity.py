@@ -159,12 +159,11 @@ def test_build_single_problem_xml_multiselect_structure_no_shuffle_no_fixed():
     assert cr is not None
     assert "partial_credit" not in cr.attrib
 
-    # Check preserved <p/> and <label>
+    # Question prompt is wrapped in <p>, no redundant <p/>, no <label> instruction tag
     p_tags = cr.findall("p")
-    assert len(p_tags) >= 2
-    label = cr.find("label")
-    assert label is not None
-    assert label.text == "Chọn tất cả đáp án đúng"
+    assert len(p_tags) == 1
+    assert p_tags[0].text == "Câu hỏi kiểm tra cấu trúc XML?"
+    assert cr.find("label") is None
 
     cbg = cr.find("checkboxgroup")
     assert cbg is not None
@@ -224,7 +223,7 @@ def test_build_single_problem_xml_special_characters():
     assert reparsed.tag == "problem"
 
     cr = reparsed.find("choiceresponse")
-    question_p = cr.findall("p")[1]
+    question_p = cr.find("p")
     assert question_p.text == "Toán tử điều kiện: a < b && c > d & \"hello\"?"
 
     choices = cr.find("checkboxgroup").findall("choice")

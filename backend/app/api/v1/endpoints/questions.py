@@ -463,7 +463,7 @@ def parse_questions_from_text(questions_text, tags_list=None, parse_group_tags=F
     current_choices = []
     current_correct_answer = None
     current_fixed_choices = []
-    current_shuffle = True
+    current_shuffle = False
     current_de_tag = None
     current_group_tags = []
     question_de_tag = None
@@ -519,7 +519,7 @@ def parse_questions_from_text(questions_text, tags_list=None, parse_group_tags=F
             current_choices = []
             current_correct_answer = None
             current_fixed_choices = []
-            current_shuffle = True
+            current_shuffle = False
         else:
             # This is a choice line with markers
             marker_str = marker_match.group(1).strip()

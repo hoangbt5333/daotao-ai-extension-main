@@ -60,60 +60,54 @@ def resolve_question_display_name(
 
 
 def create_markdown_content(question_data: Dict[str, Any]) -> str:
-    """Create markdown content for problem according to Open edX format"""
+    """
+    Create markdown content for problem according to Open edX Studio Simple Editor plain format.
+    Plain format (matches library.mau_chuan.tar.gz reference):
+    - No >>...<<, no =====, no <p/>, no ||
+    - First line: question text (if present)
+    - multiple_choice:
+      - Line 0: (!x) or (!) ONLY when question has shuffle; otherwise (x) or ( )
+      - Subsequent lines: (@x) or (@) when fixed; otherwise (x) or ( )
+      - Wrong choice marker is strictly "( )" with space (never "()")
+    - multiple_select:
+      - [x] and [ ]; never ! or @
+    - text_input / numerical:
+      - = {correct_answer}
+    """
     question_type = question_data.get("type", "multiple_choice")
-    question_text = question_data.get("question", "")
+    question_text = (question_data.get("question") or "").strip()
+
+    markdown_content = f"{question_text}\n" if question_text else ""
 
     if question_type == "multiple_choice":
-        markdown_content = f"<p/>\n{question_text}\n=====\n>>Chọn 1 đáp án đúng<<\n"
         choices = question_data.get('choices', [])
         correct_answers = question_data.get('correct_answers', [])
         fixed_choices = question_data.get('fixed_choices', [])
+        has_shuffle = bool(question_data.get('shuffle', False))
 
         for i, choice in enumerate(choices):
             is_correct = (i in correct_answers)
             is_fixed = (i in fixed_choices)
 
-            if i == 0:
-                # Dòng đầu tiên: Công tắc kích hoạt shuffle của Open edX
-                if is_correct:
-                    markdown_content += f"(!x) {choice}\n"
-                else:
-                    markdown_content += f"(!) {choice}\n"
+            if i == 0 and has_shuffle:
+                marker = "(!x)" if is_correct else "(!)"
+            elif is_fixed:
+                marker = "(@x)" if is_correct else "(@)"
             else:
-                # Các dòng từ thứ 2 trở đi
-                if is_fixed:
-                    if is_correct:
-                        markdown_content += f"(@x) {choice}\n"
-                    else:
-                        markdown_content += f"(@) {choice}\n"
-                else:
-                    if is_correct:
-                        markdown_content += f"(x) {choice}\n"
-                    else:
-                        markdown_content += f"() {choice}\n"
+                marker = "(x)" if is_correct else "( )"
+
+            markdown_content += f"{marker} {choice}\n"
 
     elif question_type == "multiple_select":
-        markdown_content = f"<p/>\n{question_text}\n=====\n>>Chọn tất cả đáp án đúng<<\n"
         choices = question_data.get('choices', [])
         correct_answers = question_data.get('correct_answers', [])
 
         for i, choice in enumerate(choices):
-            if i in correct_answers:
-                markdown_content += f"[x] {choice}\n"
-            else:
-                markdown_content += f"[ ] {choice}\n"
+            marker = "[x]" if i in correct_answers else "[ ]"
+            markdown_content += f"{marker} {choice}\n"
 
-    elif question_type == "text_input":
-        markdown_content = f"<p/>\n{question_text}\n=====\n>>Nhập đáp án<<\n"
+    elif question_type in ["text_input", "numerical"]:
         markdown_content += f"= {question_data.get('correct_answer', '')}\n"
-
-    elif question_type == "numerical":
-        markdown_content = f"<p/>\n{question_text}\n=====\n>>Nhập số<<\n"
-        markdown_content += f"= {question_data.get('correct_answer', '')}\n"
-
-    else:
-        markdown_content = f"<p/>\n{question_text}\n"
 
     return markdown_content
 
@@ -124,9 +118,15 @@ def build_single_problem_xml(
     partial_credit: Optional[str] = None
 ) -> etree.Element:
     """
-    Build a single <problem> XML etree.Element for a question.
-    Handles multiple_choice, multiple_select, text_input, and numerical.
-    Strictly preserves <p/> and <label> tags.
+    Build a single <problem> XML etree.Element for a question matching
+    OpenEdX Studio reference standard (library.mau_chuan.tar.gz).
+    - Question prompt is wrapped in <p> inside response element (if question text is present)
+    - No redundant <p/>, no <label> instruction tag
+    - shuffle="true" ONLY when question has shuffle
+    - fixed="true" ONLY when choice is in fixed_choices
+    - multiple_select has no shuffle and no fixed attributes
+    - partial_credit preserved on <choiceresponse>
+    - markdown attribute has real \\n (lxml serializes to single &#10;)
     """
     tags_list = question_data.get('tags', [])
     if isinstance(tags_list, str):
@@ -134,26 +134,28 @@ def build_single_problem_xml(
 
     tags_json = json.dumps([tag.replace('"', '\\"') for tag in tags_list], ensure_ascii=False)
     question_type = question_data.get("type", "multiple_choice")
-    question_text = question_data.get("question", "")
+    question_text = (question_data.get("question") or "").strip()
 
     if display_name is None:
         display_name = resolve_question_display_name(question_data, 0, {})
 
     problem_elem = etree.Element("problem", display_name=display_name, tags=tags_json)
 
-    # Markdown content attribute
+    # Markdown content attribute with real \\n (DO NOT replace with &#10;)
     markdown_content = create_markdown_content(question_data)
-    markdown_content = markdown_content.replace("\n", "&#10;")
     problem_elem.set("markdown", markdown_content)
 
     if question_type == "multiple_choice":
         mcr = etree.SubElement(problem_elem, "multiplechoiceresponse")
-        etree.SubElement(mcr, "p")
-        label = etree.SubElement(mcr, "label")
-        label.text = "Chọn 1 đáp án đúng"
-        p2 = etree.SubElement(mcr, "p")
-        p2.text = question_text
-        cg = etree.SubElement(mcr, "choicegroup", attrib={"type": "MultipleChoice", "shuffle": "true"})
+        if question_text:
+            p = etree.SubElement(mcr, "p")
+            p.text = question_text
+
+        has_shuffle = bool(question_data.get('shuffle', False))
+        cg_attrib = {"type": "MultipleChoice"}
+        if has_shuffle:
+            cg_attrib["shuffle"] = "true"
+        cg = etree.SubElement(mcr, "choicegroup", attrib=cg_attrib)
 
         choices = question_data.get('choices', [])
         correct_answers = question_data.get('correct_answers', [])
@@ -175,11 +177,10 @@ def build_single_problem_xml(
             cr_attrib["partial_credit"] = q_partial
 
         cr = etree.SubElement(problem_elem, "choiceresponse", attrib=cr_attrib)
-        etree.SubElement(cr, "p")
-        label = etree.SubElement(cr, "label")
-        label.text = "Chọn tất cả đáp án đúng"
-        p2 = etree.SubElement(cr, "p")
-        p2.text = question_text
+        if question_text:
+            p = etree.SubElement(cr, "p")
+            p.text = question_text
+
         # Studio does not support shuffle on checkboxgroup - do not output shuffle attribute
         cbg = etree.SubElement(cr, "checkboxgroup")
 
@@ -194,11 +195,9 @@ def build_single_problem_xml(
 
     elif question_type in ["text_input", "numerical"]:
         sr = etree.SubElement(problem_elem, "stringresponse", attrib={"answer": str(question_data.get('correct_answer', ''))})
-        etree.SubElement(sr, "p")
-        label = etree.SubElement(sr, "label")
-        label.text = "Nhập đáp án"
-        p2 = etree.SubElement(sr, "p")
-        p2.text = question_text
+        if question_text:
+            p = etree.SubElement(sr, "p")
+            p.text = question_text
         etree.SubElement(sr, "textline", attrib={"size": "20"})
 
     return problem_elem
