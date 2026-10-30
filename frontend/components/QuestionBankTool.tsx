@@ -45,6 +45,7 @@ interface Question {
   topic?: string;
   is_valid?: boolean;
   errors?: string[];
+  warnings?: string[];
   image_url?: string; // Added for image URL
 }
 
@@ -73,6 +74,7 @@ export default function QuestionBankTool() {
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [exportQuestionType, setExportQuestionType] = useState<'multiple_choice' | 'multiple_select'>('multiple_choice');
   const [showGuide, setShowGuide] = useState(false);
+  const [partialCreditMethod, setPartialCreditMethod] = useState<'none' | 'halves' | 'EDC'>('none');
 
   // Khi thay đổi parseMode, tự động sync exportQuestionType cho phù hợp
   const handleParseModeChange = (newMode: 'llm' | 'custom_single' | 'multiple_select') => {
@@ -101,6 +103,7 @@ export default function QuestionBankTool() {
     setEditImage(null);
     setEditTags([]);
     setEditTagInput("");
+    setPartialCreditMethod('none');
     setActiveStep(0);
   };
 
@@ -165,6 +168,20 @@ export default function QuestionBankTool() {
       alert("Không có câu hỏi nào để export");
       return;
     }
+
+    // Validation trước khi export: tối thiểu 2 đáp án, ít nhất 1 đáp án đúng
+    for (let i = 0; i < processedQuestions.length; i++) {
+      const q = processedQuestions[i];
+      const qName = q.name || `Câu ${i + 1}`;
+      if (!q.choices || q.choices.length < 2) {
+        alert(`Lỗi tại [${qName}]: Phải có ít nhất 2 đáp án lựa chọn!`);
+        return;
+      }
+      if (!q.correct_answers || q.correct_answers.length === 0) {
+        alert(`Lỗi tại [${qName}]: Phải có ít nhất 1 đáp án đúng!`);
+        return;
+      }
+    }
     setLoading(true);
     try {
       const formData = new FormData();
@@ -176,6 +193,7 @@ export default function QuestionBankTool() {
       const startIso = startTime ? startTime.toDate().toISOString().replace('.000', '') : '2030-01-01T00:00:00Z';
       formData.append("start_time", startIso);
       formData.append("question_type", exportQuestionType); // <--- truyền loại export
+      formData.append("partial_credit", partialCreditMethod);
       const res = await fetch(`${BACKEND}/api/v1/export/library`, {
         method: "POST",
         body: formData,
@@ -204,10 +222,26 @@ export default function QuestionBankTool() {
   };
   const handleEditSave = () => {
     if (editIndex === null || !editQuestion) return;
+
+    if (!editQuestion.question || !editQuestion.question.trim()) {
+      alert("Nội dung câu hỏi không được để trống!");
+      return;
+    }
+    if (!editQuestion.choices || editQuestion.choices.length < 2) {
+      alert("Câu hỏi phải có ít nhất 2 đáp án lựa chọn!");
+      return;
+    }
+
     // Đảm bảo correct_answers là mảng số
     const correctAnswers = Array.isArray(editQuestion.correct_answers)
       ? editQuestion.correct_answers.map(n => typeof n === 'string' ? parseInt(n) : n).filter(n => !isNaN(n))
       : [];
+
+    if (correctAnswers.length === 0) {
+      alert("Vui lòng chọn ít nhất 1 đáp án đúng!");
+      return;
+    }
+
     const updated = [...processedQuestions];
     updated[editIndex] = {
       ...editQuestion,
@@ -299,9 +333,10 @@ Câu hỏi 2: Đáp án đúng ở ngay dòng đầu tiên?
             )}
             {parseMode === 'multiple_select' && (
               <Alert severity="info" sx={{ mb: 1 }}>
-                <strong>Hướng dẫn cú pháp — Multiple Selection (nhiều đáp án đúng):</strong><br/>
+                <strong>Hướng dẫn cú pháp — Nhiều đáp án đúng:</strong><br/>
                 <pre style={{ margin: '8px 0', fontFamily: 'monospace', fontSize: '0.85em', background: '#f5f5f5', padding: '8px', borderRadius: '4px' }}>
 {`de0
+@tag: Chuong1, BaiTap
 Câu hỏi có nhiều đáp án đúng?
 [x] Đáp án đúng 1
 [x] Đáp án đúng 2
@@ -309,6 +344,7 @@ Câu hỏi có nhiều đáp án đúng?
 [ ] Đáp án sai 2`}
                 </pre>
                 • Dùng <code>[x]</code> cho các đáp án đúng, <code>[ ]</code> cho các đáp án sai.<br/>
+                • <strong>Lưu ý:</strong> Ký hiệu <code>(!)</code> và <code>(@)</code> chỉ dùng cho câu một đáp án (Multiple Choice). Câu nhiều đáp án (Multiple Selection) không hỗ trợ xáo trộn hoặc cố định vị trí theo cơ chế này (ký hiệu ! và @ nếu có sẽ bị bỏ qua).<br/>
                 • Có thể thêm <code>de0</code>, <code>de1</code>… hoặc <code>@tag: tag1, tag2</code> trước câu hỏi.
               </Alert>
             )}
@@ -456,6 +492,18 @@ Câu hỏi có nhiều đáp án đúng?
                             ))}
                           </Box>
                         )}
+                        {/* Cảnh báo không chặn (ignored !/@) */}
+                        {q.warnings && q.warnings.length > 0 && (
+                          <Alert severity="warning" sx={{ mt: 1, py: 0.5 }}>
+                            {q.warnings.join("; ")}
+                          </Alert>
+                        )}
+                        {/* Lỗi validation */}
+                        {q.is_valid === false && q.errors && q.errors.length > 0 && (
+                          <Alert severity="error" sx={{ mt: 1, py: 0.5 }}>
+                            {q.errors.join("; ")}
+                          </Alert>
+                        )}
                         {/* Tags */}
                         <Stack direction="row" spacing={1} mt={1} flexWrap="wrap" useFlexGap>
                           {(q.tags && q.tags.length > 0 ? q.tags : userTags).map((tag, i) => (
@@ -501,7 +549,25 @@ Câu hỏi có nhiều đáp án đúng?
                   labelId="type-label"
                   value={editQuestion?.type || 'multiple_choice'}
                   label="Loại câu hỏi"
-                  onChange={e => setEditQuestion(q => q ? { ...q, type: e.target.value as any, correct_answers: [] } : q)}
+                  onChange={e => {
+                    const newType = e.target.value as any;
+                    setEditQuestion(q => {
+                      if (!q) return q;
+                      let newCorrectAnswers = [...(q.correct_answers || [])];
+                      if (newType === 'multiple_choice') {
+                        // Chuyển sang 1 đáp án: giữ đáp án đầu tiên nếu có
+                        newCorrectAnswers = newCorrectAnswers.length > 0 ? [newCorrectAnswers[0]] : [];
+                      } else if (newType === 'multiple_select') {
+                        // Chuyển sang nhiều đáp án: giữ nguyên mảng đáp án đã chọn
+                        newCorrectAnswers = [...newCorrectAnswers];
+                      }
+                      return {
+                        ...q,
+                        type: newType,
+                        correct_answers: newCorrectAnswers
+                      };
+                    });
+                  }}
                 >
                   <MenuItem value="multiple_choice">Trắc nghiệm 1 đáp án</MenuItem>
                   <MenuItem value="multiple_select">Trắc nghiệm nhiều đáp án</MenuItem>
@@ -637,6 +703,56 @@ Câu hỏi có nhiều đáp án đúng?
               <FormControlLabel value="multiple_select" control={<Radio />} label="Multiple Selection (nhiều đáp án đúng)" />
             </RadioGroup>
           </Box>
+
+          {/* Tùy chọn Partial Credit cho câu nhiều đáp án */}
+          {(exportQuestionType === 'multiple_select' || processedQuestions.some(q => q.type === 'multiple_select')) && (
+            <Box sx={{ mb: 3, p: 2, bgcolor: '#fbfbfb', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+              <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+                Chế độ tính điểm câu nhiều đáp án (Partial Credit):
+              </Typography>
+              <RadioGroup
+                value={partialCreditMethod}
+                onChange={e => setPartialCreditMethod(e.target.value as 'none' | 'halves' | 'EDC')}
+              >
+                <FormControlLabel
+                  value="none"
+                  control={<Radio size="small" />}
+                  label={
+                    <Box sx={{ py: 0.5 }}>
+                      <Typography variant="body2" fontWeight={600}>Mặc định (All-or-nothing)</Typography>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        Đúng và đủ mới có điểm.
+                      </Typography>
+                    </Box>
+                  }
+                />
+                <FormControlLabel
+                  value="halves"
+                  control={<Radio size="small" />}
+                  label={
+                    <Box sx={{ py: 0.5 }}>
+                      <Typography variant="body2" fontWeight={600}>Halves</Typography>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        Sai/thiếu 1 lỗi còn 1/2 điểm, 2 lỗi còn 1/4, từ 3 lỗi là 0.
+                      </Typography>
+                    </Box>
+                  }
+                />
+                <FormControlLabel
+                  value="EDC"
+                  control={<Radio size="small" />}
+                  label={
+                    <Box sx={{ py: 0.5 }}>
+                      <Typography variant="body2" fontWeight={600}>EDC (Every Decision Counts)</Typography>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        Điểm theo tỷ lệ các lựa chọn quyết định đúng, kể cả không chọn phương án sai, nên có thể được điểm khi chọn rất ít.
+                      </Typography>
+                    </Box>
+                  }
+                />
+              </RadioGroup>
+            </Box>
+          )}
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
             <Button
               variant="outlined"

@@ -463,7 +463,7 @@ def parse_questions_from_text(questions_text, tags_list=None, parse_group_tags=F
     current_choices = []
     current_correct_answer = None
     current_fixed_choices = []
-    current_shuffle = True
+    current_shuffle = False
     current_de_tag = None
     current_group_tags = []
     question_de_tag = None
@@ -519,7 +519,7 @@ def parse_questions_from_text(questions_text, tags_list=None, parse_group_tags=F
             current_choices = []
             current_correct_answer = None
             current_fixed_choices = []
-            current_shuffle = True
+            current_shuffle = False
         else:
             # This is a choice line with markers
             marker_str = marker_match.group(1).strip()
@@ -567,128 +567,88 @@ def parse_questions_from_text(questions_text, tags_list=None, parse_group_tags=F
 
 
 def parse_multiple_select_questions_from_text(questions_text, tags_list=None, parse_group_tags=False):
-    """Parser for multiple selection format: [x]/[ ]"""
+    """Parser for multiple selection format: [x], [X], [ ], [], [!x], [@], etc."""
     questions = []
     lines = [l.strip() for l in questions_text.strip().split('\n') if l.strip()]
     current_question = None
     current_choices = []
     current_correct_answers = []
+    current_warnings = []
     current_de_tag = None
     current_group_tags = []
     question_de_tag = None
     question_group_tags = []
     user_tags = [tag for tag in (tags_list or []) if not tag.startswith('de')]
     de_tags = ['de0', 'de1', 'de2', 'de3', 'de4', 'de5', 'de6']
-    de_index = 0
-    for line in lines:
-        group_tag_marker = _parse_group_tag_marker(line) if parse_group_tags else None
-        if group_tag_marker is not None:
-            current_group_tags = group_tag_marker
-            continue
 
-        # Check if line starts with de tag
-        if line.startswith('de') and any(line.startswith(tag) for tag in de_tags):
-            current_de_tag = line
-            continue
-        # Check if line is a question (not [x]/[ ])
-        if not (line.startswith('[x]') or line.startswith('[ ]')):
-            # Nếu có câu hỏi trước đó thì lưu lại
-            if current_question and current_choices:
-                question_tags = _merge_question_tags(
-                    [question_de_tag] if question_de_tag else [],
-                    question_group_tags,
-                    user_tags,
-                )
-                questions.append({
-                    "question": current_question,
-                    "type": "multiple_select",
-                    "choices": current_choices,
-                    "correct_answers": current_correct_answers,
-                    "tags": question_tags,
-                    "topic": "",
-                    "is_valid": True,
-                    "errors": []
-                })
-            # Bắt đầu câu hỏi mới
-            current_question = line.strip()
-            question_de_tag = current_de_tag
-            question_group_tags = current_group_tags
-            current_choices = []
-            current_correct_answers = []
-        else:
-            # Đây là đáp án
-            is_correct = line.startswith('[x]')
-            choice_text = line[3:].strip()
-            if choice_text:
-                current_choices.append(choice_text)
-                if is_correct:
-                    current_correct_answers.append(len(current_choices) - 1)
-    # Đừng quên câu hỏi cuối cùng
-    if current_question and current_choices:
+    def _finalize_question():
+        if not (current_question and current_choices):
+            return
         question_tags = _merge_question_tags(
             [question_de_tag] if question_de_tag else [],
             question_group_tags,
             user_tags,
         )
-        questions.append({
+        errors = []
+        if len(current_choices) < 2:
+            errors.append("Câu hỏi phải có ít nhất 2 đáp án lựa chọn.")
+        if len(current_correct_answers) < 1:
+            errors.append("Câu hỏi trắc nghiệm nhiều đáp án phải có ít nhất 1 đáp án đúng ([x]).")
+        if not current_question or not current_question.strip():
+            errors.append("Nội dung câu hỏi không được để trống.")
+
+        is_valid = (len(errors) == 0)
+        q_dict = {
             "question": current_question,
             "type": "multiple_select",
             "choices": current_choices,
             "correct_answers": current_correct_answers,
             "tags": question_tags,
             "topic": "",
-            "is_valid": True,
-            "errors": []
-        })
+            "is_valid": is_valid,
+            "errors": errors,
+        }
+        if current_warnings:
+            q_dict["warnings"] = list(dict.fromkeys(current_warnings))
+        questions.append(q_dict)
+
+    for line in lines:
+        group_tag_marker = _parse_group_tag_marker(line) if parse_group_tags else None
+        if group_tag_marker is not None:
+            current_group_tags = group_tag_marker
+            continue
+
+        if line.startswith('de') and any(line.startswith(tag) for tag in de_tags):
+            current_de_tag = line
+            continue
+
+        # Regex matching choice line: square brackets containing any whitespace, !, @, x, X
+        marker_match = re.match(r'^\s*\[([\s!@xX]*)\]\s*(.*)', line)
+        if not marker_match:
+            # Dòng câu hỏi mới
+            _finalize_question()
+            current_question = line.strip()
+            question_de_tag = current_de_tag
+            question_group_tags = current_group_tags
+            current_choices = []
+            current_correct_answers = []
+            current_warnings = []
+        else:
+            # Dòng đáp án
+            inner = marker_match.group(1)
+            choice_text = marker_match.group(2).strip()
+            choice_idx = len(current_choices)
+            current_choices.append(choice_text)
+
+            # Kiểm tra đúng/sai
+            if 'x' in inner.lower():
+                current_correct_answers.append(choice_idx)
+
+            # Cảnh báo nếu có ! hoặc @
+            if '!' in inner or '@' in inner:
+                warn = "Câu nhiều đáp án không hỗ trợ xáo trộn/cố định vị trí; ký hiệu ! và @ đã bị bỏ qua"
+                if warn not in current_warnings:
+                    current_warnings.append(warn)
+
+    _finalize_question()
     return questions
-
-
-def apply_user_tags_to_questions(questions, tags_list, tags_explanation):
-    """Apply user tags to questions based on tags_explanation"""
-    if not tags_list or not tags_explanation:
-        return questions
-    
-    # Parse tags_explanation to understand which tags apply to which questions
-    explanation_lower = tags_explanation.lower()
-    
-    # Extract mentioned de tags from explanation
-    mentioned_de_tags = []
-    for tag in tags_list:
-        if tag.startswith('de') and tag.lower() in explanation_lower:
-            mentioned_de_tags.append(tag)
-    
-    print(f"DEBUG: tags_explanation: {tags_explanation}")
-    print(f"DEBUG: mentioned_de_tags: {mentioned_de_tags}")
-    
-    for i, question in enumerate(questions):
-        question_tags = question.get('tags', [])
-        
-        # Check if this question has a de tag that matches the explanation
-        should_apply_user_tags = False
-        
-        # Look for de tags in the question's existing tags
-        de_tags_in_question = [tag for tag in question_tags if tag.startswith('de')]
-        
-        if de_tags_in_question and mentioned_de_tags:
-            # Check if any of the question's de tags are mentioned in the explanation
-            for de_tag in de_tags_in_question:
-                if de_tag in mentioned_de_tags:
-                    should_apply_user_tags = True
-                    print(f"DEBUG: Question {i+1} with de tag {de_tag} matches explanation")
-                    break
-        elif not mentioned_de_tags:
-            # If no specific de tags mentioned in explanation, apply to all questions
-            should_apply_user_tags = True
-            print(f"DEBUG: No specific de tags mentioned, applying to all questions")
-        
-        if should_apply_user_tags:
-            existing_tags = set(question_tags)
-            # Only add non-de user tags (like "Module 3-1 bai 1")
-            non_de_user_tags = [tag for tag in tags_list if not tag.startswith('de')]
-            for tag in non_de_user_tags:
-                if tag not in existing_tags:
-                    question_tags.append(tag)
-            question['tags'] = question_tags
-            print(f"DEBUG: Applied user tags to question {i+1}: {question_tags}")
-    
-    return questions 

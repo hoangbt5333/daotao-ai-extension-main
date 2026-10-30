@@ -11,7 +11,7 @@ import re
 from lxml import etree
 from typing import Dict, Any, List, Optional
 from app.services.export.base import Exporter
-from app.services.export.helpers import resolve_question_display_name
+from app.services.export.helpers import resolve_question_display_name, build_single_problem_xml, create_markdown_content
 from app.core.logging import get_logger
 
 
@@ -33,7 +33,20 @@ class LibraryExporter(Exporter):
         questions = data.get("questions", [])
         if not isinstance(questions, list) or len(questions) == 0:
             return False
-        
+
+        for q in questions:
+            if not isinstance(q, dict):
+                return False
+            q_type = q.get("type", "multiple_choice")
+            choices = q.get("choices", [])
+            correct = q.get("correct_answers", [])
+            if q_type == "multiple_select":
+                if len(choices) < 2 or len(correct) < 1:
+                    return False
+            elif q_type == "multiple_choice":
+                if len(choices) < 2 or len(correct) != 1:
+                    return False
+
         return True
     
     def export(self, data: Dict[str, Any], output_path: str) -> bool:
@@ -50,9 +63,10 @@ class LibraryExporter(Exporter):
                 library_code = data.get("library_code", "LIB001")
                 start_time = data.get("start_time", '"2030-01-01T00:00:00Z"')
                 question_type = data.get("question_type", "multiple_choice")
+                partial_credit = data.get("partial_credit", None)
                 
                 # Create library structure
-                self._create_library_structure(questions, library_name, org, library_code, start_time, temp_dir, question_type)
+                self._create_library_structure(questions, library_name, org, library_code, start_time, temp_dir, question_type, partial_credit=partial_credit)
                 
                 # Create tar.gz file
                 self._create_tarfile(temp_dir, output_path)
@@ -67,7 +81,7 @@ class LibraryExporter(Exporter):
             self.logger.error(f"Error exporting library: {e}")
             return False
     
-    def _create_library_structure(self, questions: List[Dict[str, Any]], library_name: str, org: str, library_code: str, start_time: str, temp_dir: str, question_type: str = "multiple_choice"):
+    def _create_library_structure(self, questions: List[Dict[str, Any]], library_name: str, org: str, library_code: str, start_time: str, temp_dir: str, question_type: str = "multiple_choice", partial_credit: Optional[str] = None):
         """Create library structure"""
         # Create directories
         library_root = os.path.join(temp_dir, 'library')
@@ -88,7 +102,7 @@ class LibraryExporter(Exporter):
             display_name = resolve_question_display_name(question_data, i, used_names)
             
             # Create problem XML
-            problem_xml = self._create_problem_xml_for_library(question_data, display_name=display_name)
+            problem_xml = self._create_problem_xml_for_library(question_data, display_name=display_name, partial_credit=partial_credit)
             
             with open(os.path.join(library_root, 'problem', f'{question_id}.xml'), 'w', encoding='utf-8') as f:
                 f.write(problem_xml)
@@ -163,142 +177,16 @@ class LibraryExporter(Exporter):
         xml_bytes = etree.tostring(library_elem, encoding='utf-8', pretty_print=True, xml_declaration=False)
         return xml_bytes.decode('utf-8')
     
-    def _create_problem_xml_for_library(self, question_data: Dict[str, Any], display_name: Optional[str] = None) -> str:
+    def _create_problem_xml_for_library(self, question_data: Dict[str, Any], display_name: Optional[str] = None, partial_credit: Optional[str] = None) -> str:
         """Create problem XML file for library"""
-        tags_list = question_data.get('tags', [])
-        if isinstance(tags_list, str):
-            tags_list = [tags_list]
-        
-        tags_json = json.dumps([tag.replace('"', '\\"') for tag in tags_list], ensure_ascii=False)
-        question_type = question_data.get("type", "multiple_choice")
-        question_text = question_data.get("question", "")
-        
-        if display_name is None:
-            display_name = resolve_question_display_name(question_data, 0, {})
-
-        problem_elem = etree.Element("problem", display_name=display_name, tags=tags_json)
-        
-        # Create markdown content
-        markdown_content = self._create_markdown_content(question_data)
-        markdown_content = markdown_content.replace("\n", "&#10;")
-        problem_elem.set("markdown", markdown_content)
-        
-        # Build XML structure
-        if question_type == "multiple_choice":
-            mcr = etree.SubElement(problem_elem, "multiplechoiceresponse")
-            etree.SubElement(mcr, "p")
-            # h3 = etree.SubElement(mcr, "h3", attrib={"class": "hd hd-2 problem-header"})
-            # h3.text = "Câu hỏi"
-            label = etree.SubElement(mcr, "label")
-            label.text = "Chọn 1 đáp án đúng"
-            p2 = etree.SubElement(mcr, "p")
-            p2.text = question_text
-            cg = etree.SubElement(mcr, "choicegroup", attrib={"type": "MultipleChoice", "shuffle": "true"})
-            
-            choices = question_data.get('choices', [])
-            correct_answers = question_data.get('correct_answers', [])
-            fixed_choices = question_data.get('fixed_choices', [])
-            
-            for i, choice in enumerate(choices):
-                correct = "true" if i in correct_answers else "false"
-                choice_attrib = {"correct": correct}
-                if i in fixed_choices:
-                    choice_attrib["fixed"] = "true"
-                c = etree.SubElement(cg, "choice", attrib=choice_attrib)
-                c.text = choice
-        
-        elif question_type == "multiple_select":
-            cr = etree.SubElement(problem_elem, "choiceresponse")
-            etree.SubElement(cr, "p")
-            # h3 = etree.SubElement(cr, "h3", attrib={"class": "hd hd-2 problem-header"})
-            # h3.text = "Câu hỏi"
-            label = etree.SubElement(cr, "label")
-            label.text = "Chọn tất cả đáp án đúng"
-            p2 = etree.SubElement(cr, "p")
-            p2.text = question_text
-            cbg = etree.SubElement(cr, "checkboxgroup")
-            
-            choices = question_data.get('choices', [])
-            correct_answers = question_data.get('correct_answers', [])
-            
-            for i, choice in enumerate(choices):
-                correct = "true" if i in correct_answers else "false"
-                c = etree.SubElement(cbg, "choice", attrib={"correct": correct})
-                c.text = choice
-        
-        elif question_type in ["text_input", "numerical"]:
-            sr = etree.SubElement(problem_elem, "stringresponse", attrib={"answer": str(question_data.get('correct_answer', ''))})
-            etree.SubElement(sr, "p")
-            # h3 = etree.SubElement(sr, "h3", attrib={"class": "hd hd-2 problem-header"})
-            # h3.text = "Câu hỏi"
-            label = etree.SubElement(sr, "label")
-            label.text = "Nhập đáp án"
-            p2 = etree.SubElement(sr, "p")
-            p2.text = question_text
-            etree.SubElement(sr, "textline", attrib={"size": "20"})
-        
-        # Pretty-print XML
-        xml_bytes = etree.tostring(problem_elem, encoding='utf-8', pretty_print=True, xml_declaration=False)
+        elem = build_single_problem_xml(question_data, display_name=display_name, partial_credit=partial_credit)
+        xml_bytes = etree.tostring(elem, encoding='utf-8', pretty_print=True, xml_declaration=False)
         return xml_bytes.decode('utf-8')
-    
+
     def _create_markdown_content(self, question_data: Dict[str, Any]) -> str:
         """Create markdown content for problem"""
-        question_type = question_data.get("type", "multiple_choice")
-        question_text = question_data.get("question", "")
-        
-        if question_type == "multiple_choice":
-            markdown_content = f"<p/>\n{question_text}\n=====\n>>Chọn 1 đáp án đúng<<\n"
-            choices = question_data.get('choices', [])
-            correct_answers = question_data.get('correct_answers', [])
-            fixed_choices = question_data.get('fixed_choices', [])
-            
-            for i, choice in enumerate(choices):
-                is_correct = (i in correct_answers)
-                is_fixed = (i in fixed_choices)
-                
-                if i == 0:
-                    # Dòng đầu tiên: Công tắc kích hoạt shuffle của Open edX
-                    if is_correct:
-                        markdown_content += f"(!x) {choice}\n"
-                    else:
-                        markdown_content += f"(!) {choice}\n"
-                else:
-                    # Các dòng từ thứ 2 trở đi
-                    if is_fixed:
-                        if is_correct:
-                            markdown_content += f"(@x) {choice}\n"
-                        else:
-                            markdown_content += f"(@) {choice}\n"
-                    else:
-                        if is_correct:
-                            markdown_content += f"(x) {choice}\n"
-                        else:
-                            markdown_content += f"() {choice}\n"
-        
-        elif question_type == "multiple_select":
-            markdown_content = f"<p/>\n{question_text}\n=====\n>>Chọn tất cả đáp án đúng<<\n"
-            choices = question_data.get('choices', [])
-            correct_answers = question_data.get('correct_answers', [])
-            
-            for i, choice in enumerate(choices):
-                if i in correct_answers:
-                    markdown_content += f"[x] {choice}\n"
-                else:
-                    markdown_content += f"[ ] {choice}\n"
-        
-        elif question_type == "text_input":
-            markdown_content = f"<p/>\n{question_text}\n=====\n>>Nhập đáp án<<\n"
-            markdown_content += f"= {question_data.get('correct_answer', '')}\n"
-        
-        elif question_type == "numerical":
-            markdown_content = f"<p/>\n{question_text}\n=====\n>>Nhập số<<\n"
-            markdown_content += f"= {question_data.get('correct_answer', '')}\n"
-        
-        else:
-            markdown_content = f"<p/>\n{question_text}\n"
-        
-        return markdown_content
-    
+        return create_markdown_content(question_data)
+
     def _create_tarfile(self, source_dir: str, output_path: str):
         """Create tar.gz file from source directory"""
         with tarfile.open(output_path, "w:gz") as tar:

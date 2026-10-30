@@ -100,7 +100,8 @@ async def export_library(
     library_code: str = Form("LIB001"),
     start_time: str = Form(None),
     filename: Optional[str] = Query(None),
-    question_type: str = Form("multiple_choice")
+    question_type: str = Form("multiple_choice"),
+    partial_credit: Optional[str] = Form(None)
 ):
     """Export questions as Library format"""
     try:
@@ -133,7 +134,8 @@ async def export_library(
             "org": org,
             "library_code": library_code,
             "start_time": start_time,
-            "question_type": question_type
+            "question_type": question_type,
+            "partial_credit": partial_credit
         }
         
         success = export_service.export("library", export_data, tar_path)
