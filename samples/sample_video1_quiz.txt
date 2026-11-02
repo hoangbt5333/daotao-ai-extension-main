@@ -1,0 +1,15 @@
+@tag: chuong1, video_quiz
+
+@time: 01:00
+Câu 1: Nền tảng học trực tuyến nào sau đây là mã nguồn mở?
+(!) Hệ điều hành Linux
+(x) Open edX
+( ) Windows 11
+(@) Tất cả đều sai
+
+@time: 02:15
+Câu 2: Các phân hệ chính cấu thành nên kiến trúc Open edX gồm những gì?
+[x] LMS (Learning Management System)
+[x] CMS (Studio)
+[ ] Microsoft PowerPoint
+[ ] Adobe Premiere

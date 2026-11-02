@@ -1,0 +1,14 @@
+﻿@tag: chuong1, video_quiz
+
+@time: 00:45
+Câu 1: In-Video Quiz Open edX sử dụng XBlock nào?
+(x) invideoquiz_v2
+( ) video_player_v1
+( ) html_embed
+(@) Không cần XBlock
+
+@time: 01:30
+Câu 2: Mốc thời gian của In-Video Quiz có thể trùng nhau trong một video không?
+( ) Có thể trùng nhau
+(x) Bắt buộc phải là các mốc thời gian riêng biệt
+( ) Tùy chọn theo cấu hình

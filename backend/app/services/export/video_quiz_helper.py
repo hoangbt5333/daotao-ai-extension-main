@@ -9,7 +9,14 @@ import xml.etree.ElementTree as ET
 from typing import Dict, Any, List, Optional, Tuple
 from urllib.parse import urlparse, parse_qs
 from lxml import etree
-from app.services.export.helpers import resolve_question_display_name, build_single_problem_xml
+from app.services.export.helpers import (
+    resolve_question_display_name,
+    build_single_problem_xml,
+    parse_group_tag_marker,
+    match_radio_choice,
+    match_checkbox_choice,
+    merge_question_tags,
+)
 
 
 def generate_uuid() -> str:
@@ -267,3 +274,288 @@ def build_invideoquiz_unit(
         "timemap": timemap,
         "vertical_xml": vert_xml,
     }
+
+
+def parse_video_quiz_text(
+    content: Any,
+    filename: str = "quiz.txt"
+) -> Tuple[List[Dict[str, Any]], List[str]]:
+    """
+    Parse a text file containing in-video quiz questions.
+
+    Supports:
+    - UTF-8 with BOM or plain UTF-8 (utf-8-sig)
+    - QuestionBank syntax:
+      - Radio: (!), (x), ( ), (@), (@x)
+      - Checkbox: [x], [ ], [X], []
+      - @tag: persistent across questions until changed
+      - @time: applies ONLY to the immediately following question
+    - Automatic question type detection (multiple_choice vs multiple_select)
+    - 1-based exact line numbering (preserving empty lines)
+    - Full error collection across the entire file
+    """
+    if isinstance(content, bytes):
+        try:
+            text = content.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            return [], [f"File '{filename}': File phải lưu dạng UTF-8."]
+    elif isinstance(content, str):
+        text = content
+    else:
+        return [], [f"File '{filename}': Định dạng nội dung không hợp lệ."]
+
+    lines = text.splitlines()
+    questions: List[Dict[str, Any]] = []
+    errors: List[str] = []
+
+    pending_time: Optional[Tuple[str, int]] = None  # (raw_str, line_idx)
+    current_tags: List[str] = []
+
+    current_prompt_lines: List[str] = []
+    current_q_start_line: Optional[int] = None
+    current_choices: List[Dict[str, Any]] = []
+    current_choice_mode: Optional[str] = None  # 'radio' or 'checkbox'
+    current_assigned_time: Optional[Tuple[str, int]] = None
+
+    seen_seconds: Dict[int, Tuple[int, str]] = {}  # sec -> (line_idx, raw_ts)
+
+    def finalize_question():
+        nonlocal current_prompt_lines, current_q_start_line, current_choices, current_choice_mode, current_assigned_time
+        if not current_prompt_lines and not current_choices:
+            return
+
+        q_line = current_q_start_line or 1
+        prompt = "\n".join(current_prompt_lines).strip()
+        prompt_preview = prompt.replace("\n", " ")[:30]
+
+        if not prompt:
+            errors.append(f"File '{filename}', Dòng {q_line}: Nội dung câu hỏi không được để trống.")
+
+        # Check @time
+        q_sec = None
+        if not current_assigned_time:
+            errors.append(
+                f"File '{filename}', Dòng {q_line}: Câu hỏi '{prompt_preview}...' thiếu mốc thời gian @time: "
+                f"(cần khai báo @time: MM:SS trước câu hỏi)."
+            )
+            raw_ts = None
+        else:
+            raw_ts, time_line = current_assigned_time
+            try:
+                sec = parse_timestamp_to_seconds(raw_ts)
+                q_sec = sec
+                if sec in seen_seconds:
+                    prev_line, prev_ts = seen_seconds[sec]
+                    errors.append(
+                        f"File '{filename}', Dòng {time_line}: Mốc thời gian '{raw_ts}' ({sec}s) bị trùng với mốc '{prev_ts}' tại dòng {prev_line}. "
+                        "Mỗi câu hỏi trong video phải có mốc thời gian xuất hiện riêng biệt, không được trùng lặp."
+                    )
+                else:
+                    seen_seconds[sec] = (time_line, raw_ts)
+            except ValueError as e:
+                errors.append(f"File '{filename}', Dòng {time_line}: Mốc thời gian '{raw_ts}' không hợp lệ: {str(e)}")
+
+        # Check choices count
+        if len(current_choices) < 2:
+            errors.append(f"File '{filename}', Dòng {q_line}: Câu hỏi phải có ít nhất 2 đáp án lựa chọn (hiện có {len(current_choices)}).")
+
+        correct_indices = [i for i, c in enumerate(current_choices) if c["correct"]]
+        fixed_indices = [i for i, c in enumerate(current_choices) if c["fixed"]]
+        has_shuffle = any(c["shuffle"] for c in current_choices)
+
+        if current_choice_mode == "radio":
+            q_type = "multiple_choice"
+            if len(correct_indices) == 0:
+                errors.append(f"File '{filename}', Dòng {q_line}: Câu hỏi một đáp án phải có 1 đáp án đúng (x).")
+            elif len(correct_indices) > 1:
+                errors.append(f"File '{filename}', Dòng {q_line}: Câu hỏi một đáp án không được có nhiều hơn 1 đáp án đúng (tìm thấy {len(correct_indices)} đáp án đúng).")
+        elif current_choice_mode == "checkbox":
+            q_type = "multiple_select"
+            if len(correct_indices) == 0:
+                errors.append(f"File '{filename}', Dòng {q_line}: Câu hỏi nhiều đáp án phải có ít nhất 1 đáp án đúng [x].")
+        else:
+            q_type = "unknown"
+            errors.append(f"File '{filename}', Dòng {q_line}: Câu hỏi không có lựa chọn đáp án hợp lệ (( ) hoặc [ ]).")
+
+        questions.append({
+            "question": prompt,
+            "type": q_type,
+            "timestamp": raw_ts,
+            "seconds": q_sec,
+            "line": q_line,
+            "choices": [c["text"] for c in current_choices],
+            "correct_answers": correct_indices,
+            "fixed_choices": fixed_indices,
+            "shuffle": has_shuffle,
+            "tags": list(current_tags),
+        })
+
+        # Reset per-question state
+        current_prompt_lines = []
+        current_q_start_line = None
+        current_choices = []
+        current_choice_mode = None
+        current_assigned_time = None
+
+    for line_idx, raw_line in enumerate(lines, start=1):
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        group_tags = parse_group_tag_marker(line)
+        if group_tags is not None:
+            current_tags = group_tags
+            continue
+
+        if line.startswith("@time:"):
+            time_val = line[len("@time:"):].strip()
+            # If we had a previous question with choices collected, finalize it first
+            if current_choices:
+                finalize_question()
+
+            if pending_time is not None:
+                errors.append(
+                    f"File '{filename}', Dòng {line_idx}: Phát hiện hai chỉ thị @time: liên tiếp "
+                    f"(dòng {pending_time[1]} và dòng {line_idx}) mà không có câu hỏi ở giữa."
+                )
+            pending_time = (time_val, line_idx)
+            continue
+
+        radio_m = match_radio_choice(line)
+        box_m = match_checkbox_choice(line)
+
+        if radio_m:
+            if current_choice_mode == "checkbox":
+                errors.append(
+                    f"File '{filename}', Dòng {line_idx}: Không được trộn lẫn định dạng một đáp án ( ) "
+                    f"vào câu hỏi nhiều đáp án [ ]."
+                )
+            else:
+                current_choice_mode = "radio"
+
+            inner = radio_m.group(1).strip()
+            c_text = radio_m.group(2).strip()
+            c_idx = len(current_choices)
+            current_choices.append({
+                "text": c_text,
+                "correct": "x" in inner.lower(),
+                "fixed": "@" in inner or ("!" in inner and c_idx > 0),
+                "shuffle": "!" in inner and c_idx == 0,
+                "line": line_idx
+            })
+        elif box_m:
+            if current_choice_mode == "radio":
+                errors.append(
+                    f"File '{filename}', Dòng {line_idx}: Không được trộn lẫn định dạng nhiều đáp án [ ] "
+                    f"vào câu hỏi một đáp án ( )."
+                )
+            else:
+                current_choice_mode = "checkbox"
+
+            inner = box_m.group(1).strip()
+            c_text = box_m.group(2).strip()
+            current_choices.append({
+                "text": c_text,
+                "correct": "x" in inner.lower(),
+                "fixed": False,
+                "shuffle": False,
+                "line": line_idx
+            })
+        else:
+            # Question prompt line
+            if current_choices:
+                finalize_question()
+
+            if not current_prompt_lines:
+                current_q_start_line = line_idx
+                if pending_time is not None:
+                    current_assigned_time = pending_time
+                    pending_time = None
+
+            current_prompt_lines.append(line)
+
+    finalize_question()
+
+    if pending_time is not None:
+        errors.append(
+            f"File '{filename}', Dòng {pending_time[1]}: Chỉ thị @time: '{pending_time[0]}' không có câu hỏi theo sau."
+        )
+
+    return questions, errors
+
+
+def validate_and_prepare_video_quiz_units(
+    outline: List[Dict[str, Any]],
+    uploaded_txt_files: Dict[str, bytes]
+) -> List[str]:
+    """
+    Validate all video_quiz units in outline and match against uploaded .txt files.
+    Matches by EXACT FILENAME (case-insensitive), NO fuzzy/smart matching, NO fallback.
+    Collects ALL errors in a single batch list.
+    Populates unit['questions'] on successfully parsed units.
+    """
+    errors: List[str] = []
+    uploaded_map = {fn.strip().lower(): (fn, data) for fn, data in uploaded_txt_files.items()}
+    matched_keys = set()
+
+    for chapter in outline:
+        for subsection in chapter.get("subsections", []):
+            for unit in subsection.get("units", []):
+                u_type = (unit.get("type") or "").strip().lower()
+                if u_type != "video_quiz":
+                    continue
+
+                u_title = unit.get("title", "Untitled Unit")
+                v_url = unit.get("video_url") or ""
+
+                # 1. Validate YouTube URL
+                yt_id = extract_youtube_id(v_url)
+                if not yt_id:
+                    errors.append(
+                        f"Unit '{u_title}': URL video '{v_url}' không phải là YouTube hợp lệ (ID 11 ký tự). "
+                        "In-Video Quiz chỉ hỗ trợ video YouTube (không áp dụng với iframe/raw HTML/Google Drive theo mục 3.7 tài liệu hướng dẫn)."
+                    )
+
+                # 2. Check quiz file specification in unit
+                raw_file = unit.get("quiz_file") or unit.get("content") or unit.get("file") or ""
+                raw_file = str(raw_file).strip()
+                if not raw_file:
+                    errors.append(
+                        f"Unit '{u_title}': Chưa khai báo tên file câu hỏi (.txt) trong cột Content."
+                    )
+                    continue
+
+                norm_file = raw_file.lower()
+                matched_key = None
+                if norm_file in uploaded_map:
+                    matched_key = norm_file
+                elif f"{norm_file}.txt" in uploaded_map:
+                    matched_key = f"{norm_file}.txt"
+
+                if not matched_key:
+                    errors.append(
+                        f"Unit '{u_title}': Không tìm thấy file câu hỏi '{raw_file}' trong danh sách tải lên "
+                        "(yêu cầu khớp tên chính xác, không dùng khớp gần đúng)."
+                    )
+                    continue
+
+                real_fn, file_bytes = uploaded_map[matched_key]
+                matched_keys.add(matched_key)
+
+                # 3. Parse questions & collect errors
+                unit_questions, parse_errors = parse_video_quiz_text(file_bytes, filename=real_fn)
+                if parse_errors:
+                    errors.extend(parse_errors)
+                elif not unit_questions:
+                    errors.append(f"File '{real_fn}': File không chứa câu hỏi nào hợp lệ.")
+                else:
+                    unit["questions"] = unit_questions
+
+    # 4. Check for orphaned uploaded .txt files
+    for norm_fn, (real_fn, _) in uploaded_map.items():
+        if norm_fn not in matched_keys:
+            errors.append(
+                f"File '{real_fn}': File câu hỏi đã tải lên nhưng không khớp với bất kỳ unit 'video_quiz' nào trong outline."
+            )
+
+    return errors

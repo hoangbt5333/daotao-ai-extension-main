@@ -40,20 +40,42 @@ async def export_openedx(
         tar_name = f"{safe_filename}.tar.gz"
         tar_path = os.path.join(settings.file.export_dir, tar_name)
         
-        # Save uploaded asset files (PDF, MP3, etc.) to temporary paths
-        allowed_extensions = ('.pdf', '.mp3', '.ogg', '.wav')
+        # Separate uploaded files into static assets (.pdf, .mp3) and quiz question files (.txt)
+        allowed_asset_extensions = ('.pdf', '.mp3', '.ogg', '.wav')
         uploaded_asset_paths = []
+        uploaded_txt_files = {}
+
         for file in files:
-            if file.filename and file.filename.lower().endswith(allowed_extensions):
+            if not file.filename:
+                continue
+            fn_lower = file.filename.lower()
+            if fn_lower.endswith('.txt'):
+                txt_bytes = await file.read()
+                uploaded_txt_files[file.filename] = txt_bytes
+            elif fn_lower.endswith(allowed_asset_extensions):
                 temp_file_path = os.path.join(temp_dir, file.filename)
                 with open(temp_file_path, "wb") as buffer:
                     shutil.copyfileobj(file.file, buffer)
                 uploaded_asset_paths.append(temp_file_path)
-        
+
+        outline_list = outline_data.get('outline', []) if isinstance(outline_data, dict) else outline_data
+
+        # Validate In-Video Quiz units and match against uploaded .txt files
+        from app.services.export.video_quiz_helper import validate_and_prepare_video_quiz_units
+        vq_errors = validate_and_prepare_video_quiz_units(outline_list, uploaded_txt_files)
+        if vq_errors:
+            error_list_str = "\n".join(f"• {e}" for e in vq_errors)
+            return ExportResponse(
+                success=False,
+                tar_file="",
+                export_type="openedx",
+                message=f"Lỗi kiểm tra dữ liệu In-Video Quiz:\n{error_list_str}"
+            )
+
         try:
             # Prepare data for export
             export_data = {
-                "outline": outline_data.get('outline', []) if isinstance(outline_data, dict) else outline_data,
+                "outline": outline_list,
                 "questions": questions_data.get('questions', []) if isinstance(questions_data, dict) else questions_data,
                 "uploaded_pdfs": uploaded_asset_paths,
                 "uploaded_assets": uploaded_asset_paths

@@ -201,3 +201,31 @@ def build_single_problem_xml(
         etree.SubElement(sr, "textline", attrib={"size": "20"})
 
     return problem_elem
+
+import re
+
+RADIO_CHOICE_PATTERN = re.compile(r'^\s*\(([!x@\s]*)\)\s*(.*)')
+CHECKBOX_CHOICE_PATTERN = re.compile(r'^\s*\[([\s!@xX]*)\]\s*(.*)')
+
+
+def match_radio_choice(line: str):
+    return RADIO_CHOICE_PATTERN.match(line)
+
+
+def match_checkbox_choice(line: str):
+    return CHECKBOX_CHOICE_PATTERN.match(line)
+
+
+def parse_group_tag_marker(line: str) -> Optional[List[str]]:
+    if not line.startswith('@tag:'):
+        return None
+    return [tag.strip() for tag in line[len('@tag:'):].split(',') if tag.strip()]
+
+
+def merge_question_tags(*tag_groups) -> List[str]:
+    tags = []
+    for group in tag_groups:
+        for tag in group:
+            if tag and tag not in tags:
+                tags.append(tag)
+    return tags
