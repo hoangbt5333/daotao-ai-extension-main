@@ -35,17 +35,20 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import AudioFileIcon from '@mui/icons-material/AudioFile';
 import CodeIcon from '@mui/icons-material/Code';
 import UploadIcon from '@mui/icons-material/Upload';
+import QuizIcon from '@mui/icons-material/Quiz';
 
 // Outline data type
 interface OutlineUnit {
   title: string;
-  type?: 'video' | 'pdf' | 'docx' | 'text' | 'video_pdf' | 'audio' | 'embed';
+  type?: 'video' | 'pdf' | 'docx' | 'text' | 'video_pdf' | 'audio' | 'embed' | 'video_quiz';
   file?: File | null;
   fileUrl?: string;
-  video_url?: string; // For video and video_pdf types
+  video_url?: string; // For video, video_pdf, video_quiz types
   pdf_file?: string; // For video_pdf type
   audio_file?: string; // For audio type
   embed_code?: string; // For embed type (iframe, GDrive, SharePoint)
+  quiz_file?: string; // For video_quiz type (.txt filename)
+  content?: string; // For quiz file or general content
 }
 
 interface OutlineSubsection {
@@ -86,11 +89,12 @@ export default function EditableOutlineTree({
     unitIdx?: number, 
     value: string, 
     mode: 'edit'|'add',
-    unitType?: 'video' | 'pdf' | 'docx' | 'text' | 'video_pdf' | 'audio' | 'embed',
+    unitType?: 'video' | 'pdf' | 'docx' | 'text' | 'video_pdf' | 'audio' | 'embed' | 'video_quiz',
     unitFile?: File | null,
     pdfFile?: File | null,
     videoUrl?: string,
-    embedCode?: string
+    embedCode?: string,
+    quizFileName?: string
   }>(null);
 
   // Log dữ liệu outline để debug
@@ -110,7 +114,8 @@ export default function EditableOutlineTree({
         unitFile: unit?.file || (unit?.audio_file ? new File([], unit.audio_file) : null),
         pdfFile: unit?.pdf_file ? new File([], unit.pdf_file) : null,
         videoUrl: unit?.video_url || '',
-        embedCode: unit?.embed_code || ''
+        embedCode: unit?.embed_code || '',
+        quizFileName: unit?.quiz_file || (unit?.type === 'video_quiz' ? unit?.content : '') || ''
       });
     } else {
     setEditDialog({ type, ...idxs, value, mode: 'edit' });
@@ -135,7 +140,7 @@ export default function EditableOutlineTree({
   
   const handleDialogSave = () => {
     if (!editDialog) return;
-    const { type, chapterIdx, subIdx, unitIdx, value, mode, unitType, unitFile, pdfFile, videoUrl, embedCode } = editDialog;
+    const { type, chapterIdx, subIdx, unitIdx, value, mode, unitType, unitFile, pdfFile, videoUrl, embedCode, quizFileName } = editDialog;
     const newData = JSON.parse(JSON.stringify(safeOutlineData));
     
     if (type === 'chapter') {
@@ -153,8 +158,8 @@ export default function EditableOutlineTree({
         file: unitFile || null
       };
       
-      // Add video_url for video and video_pdf types
-      if ((unitType === 'video' || unitType === 'video_pdf') && videoUrl) {
+      // Add video_url for video, video_pdf, and video_quiz types
+      if ((unitType === 'video' || unitType === 'video_pdf' || unitType === 'video_quiz') && videoUrl) {
         unitData.video_url = videoUrl;
       }
       
@@ -171,6 +176,15 @@ export default function EditableOutlineTree({
       // Add embed_code for embed type
       if (unitType === 'embed' && embedCode) {
         unitData.embed_code = embedCode;
+      }
+
+      // Add quiz_file for video_quiz type
+      if (unitType === 'video_quiz') {
+        const qName = unitFile ? unitFile.name : (quizFileName || '');
+        if (qName) {
+          unitData.quiz_file = qName;
+          unitData.content = qName;
+        }
       }
       
       if (mode === 'edit' && unitIdx !== undefined) {
@@ -193,6 +207,7 @@ export default function EditableOutlineTree({
       case 'embed': return <CodeIcon fontSize="small" />;
       case 'docx': return <DescriptionIcon fontSize="small" />;
       case 'video_pdf': return <VideoFileIcon fontSize="small" />;
+      case 'video_quiz': return <QuizIcon fontSize="small" />;
       default: return null;
     }
   };
@@ -205,6 +220,7 @@ export default function EditableOutlineTree({
       case 'embed': return 'Nhúng (Embed / Iframe)';
       case 'docx': return 'DOCX';
       case 'video_pdf': return 'Video + PDF';
+      case 'video_quiz': return 'Video Quiz (In-Video)';
       default: return 'Text';
     }
   };
@@ -352,11 +368,20 @@ export default function EditableOutlineTree({
                                         </Box>
                                       }
                                       secondary={
-                                        unit.video_url && (
-                                          <Typography variant="caption" color="text.secondary">
-                                            Video URL: {unit.video_url}
-                                          </Typography>
-                                        )
+                                        (unit.video_url || unit.quiz_file || (unit.type === 'video_quiz' && unit.content)) ? (
+                                          <Box component="span" sx={{ display: 'block' }}>
+                                            {unit.video_url && (
+                                              <Typography variant="caption" color="text.secondary" display="block">
+                                                Video URL: {unit.video_url}
+                                              </Typography>
+                                            )}
+                                            {(unit.quiz_file || (unit.type === 'video_quiz' && unit.content)) && (
+                                              <Typography variant="caption" color="text.secondary" display="block">
+                                                Quiz file: {unit.quiz_file || unit.content}
+                                              </Typography>
+                                            )}
+                                          </Box>
+                                        ) : null
                                       }
                                     />
                                     <IconButton 
@@ -423,6 +448,7 @@ export default function EditableOutlineTree({
                   <MenuItem value="embed">Nhúng (GDrive / SharePoint / iframe)</MenuItem>
                   <MenuItem value="docx">DOCX</MenuItem>
                   <MenuItem value="video_pdf">Video + PDF</MenuItem>
+                  <MenuItem value="video_quiz">Video Quiz (In-Video)</MenuItem>
                 </Select>
               </FormControl>
               
@@ -524,6 +550,67 @@ export default function EditableOutlineTree({
                   {editDialog.pdfFile && (
                     <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                       Đã chọn: {editDialog.pdfFile.name} ({(editDialog.pdfFile.size / 1024 / 1024).toFixed(2)} MB)
+                    </Typography>
+                  )}
+                </Box>
+              )}
+
+              {editDialog.unitType === 'video_quiz' && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Đường link YouTube (bắt buộc):
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    label="URL YouTube"
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    value={editDialog.videoUrl || ''}
+                    onChange={(e) => setEditDialog(editDialog ? { ...editDialog, videoUrl: e.target.value } : null)}
+                    helperText="Nhập link video YouTube (ID 11 ký tự)"
+                    sx={{ mb: 2 }}
+                  />
+
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    File câu hỏi quiz (.txt):
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    label="Tên file câu hỏi"
+                    placeholder="video1_quiz.txt"
+                    value={editDialog.quizFileName || ''}
+                    onChange={(e) => setEditDialog(editDialog ? { ...editDialog, quizFileName: e.target.value } : null)}
+                    helperText="Nhập tên file .txt chứa câu hỏi đã upload ở mục 2, hoặc chọn file bên dưới"
+                    sx={{ mb: 1.5 }}
+                  />
+                  <input
+                    type="file"
+                    accept=".txt,text/plain"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      if (file) {
+                        setEditDialog(editDialog ? { 
+                          ...editDialog, 
+                          unitFile: file,
+                          quizFileName: file.name
+                        } : null);
+                      }
+                    }}
+                    style={{ display: 'none' }}
+                    id="quiz-file-upload"
+                  />
+                  <label htmlFor="quiz-file-upload">
+                    <Button
+                      variant="outlined"
+                      component="span"
+                      startIcon={<UploadIcon />}
+                      fullWidth
+                    >
+                      {editDialog.unitFile ? editDialog.unitFile.name : 'Chọn file câu hỏi .txt'}
+                    </Button>
+                  </label>
+                  {editDialog.unitFile && (
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                      Đã chọn: {editDialog.unitFile.name} ({(editDialog.unitFile.size / 1024).toFixed(2)} KB)
                     </Typography>
                   )}
                 </Box>
