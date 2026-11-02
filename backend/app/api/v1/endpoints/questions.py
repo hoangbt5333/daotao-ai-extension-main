@@ -436,19 +436,15 @@ async def get_questions_from_library(
         )
 
 
-def _parse_group_tag_marker(line):
-    if not line.startswith('@tag:'):
-        return None
-    return [tag.strip() for tag in line[len('@tag:'):].split(',') if tag.strip()]
+from app.services.export.helpers import (
+    parse_group_tag_marker,
+    merge_question_tags,
+    match_radio_choice,
+    match_checkbox_choice,
+)
 
-
-def _merge_question_tags(*tag_groups):
-    tags = []
-    for group in tag_groups:
-        for tag in group:
-            if tag and tag not in tags:
-                tags.append(tag)
-    return tags
+_parse_group_tag_marker = parse_group_tag_marker
+_merge_question_tags = merge_question_tags
 
 
 def parse_questions_from_text(questions_text, tags_list=None, parse_group_tags=False):
@@ -486,7 +482,7 @@ def parse_questions_from_text(questions_text, tags_list=None, parse_group_tags=F
             continue
             
         # Check if line starts with choice marker pattern: e.g. ( ), (x), (!), (!x), (@), (@x), (x@)
-        marker_match = re.match(r'^\s*\(([!x@\s]*)\)\s*(.*)', line)
+        marker_match = match_radio_choice(line)
         
         if not marker_match:
             # This is a question line (no markers)
@@ -623,7 +619,7 @@ def parse_multiple_select_questions_from_text(questions_text, tags_list=None, pa
             continue
 
         # Regex matching choice line: square brackets containing any whitespace, !, @, x, X
-        marker_match = re.match(r'^\s*\[([\s!@xX]*)\]\s*(.*)', line)
+        marker_match = match_checkbox_choice(line)
         if not marker_match:
             # Dòng câu hỏi mới
             _finalize_question()

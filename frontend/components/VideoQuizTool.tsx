@@ -3,11 +3,10 @@
 import React, { useState } from 'react';
 import {
   Box, Typography, Paper, TextField, Button, CircularProgress, Stepper, Step, StepLabel,
-  Chip, Stack, Alert, Divider, List, ListItem, ListItemText, IconButton, FormControl,
+  Alert, List, ListItem, IconButton, FormControl,
   InputLabel, Select, MenuItem
 } from '@mui/material';
 import UploadIcon from '@mui/icons-material/Upload';
-import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 
@@ -24,8 +23,49 @@ interface VideoQuestion {
   choices?: string[];
   correct_answers: number[];
   tags: string[];
-  timestamp: string; // format: "MM:SS"
+  timestamp: string; // format: "MM:SS" or seconds
   seconds: number; // calculated from timestamp
+}
+
+// Single canonical place in frontend to extract YouTube 11-char ID
+export function extractYouTubeId(url: string): string | null {
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  const lower = trimmed.toLowerCase();
+
+  // Explicitly reject iframes, embed codes, and Google Drive (per docs 3.7)
+  if (lower.includes('<iframe') || lower.includes('<video') || lower.includes('drive.google.com')) {
+    return null;
+  }
+
+  // Support watch?v=, embed/, youtu.be/, shorts/
+  const regExp = /(?:youtube\.com\/(?:watch\?.*v=|embed\/|v\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/;
+  const match = trimmed.match(regExp);
+  return match ? match[1] : null;
+}
+
+// Single canonical place in frontend to convert MM:SS or seconds string to integer seconds
+export function parseTimestampToSeconds(ts: string): number | null {
+  if (!ts) return null;
+  const trimmed = ts.trim();
+
+  // Pure integer seconds: e.g. "60", "90"
+  if (/^\d+$/.test(trimmed)) {
+    return parseInt(trimmed, 10);
+  }
+
+  // Format MM:SS: e.g. "01:30"
+  const parts2 = trimmed.split(':');
+  if (parts2.length === 2 && /^\d+$/.test(parts2[0]) && /^\d{2}$/.test(parts2[1])) {
+    return parseInt(parts2[0], 10) * 60 + parseInt(parts2[1], 10);
+  }
+
+  // Format HH:MM:SS: e.g. "01:02:03"
+  if (parts2.length === 3 && /^\d+$/.test(parts2[0]) && /^\d{2}$/.test(parts2[1]) && /^\d{2}$/.test(parts2[2])) {
+    return parseInt(parts2[0], 10) * 3600 + parseInt(parts2[1], 10) * 60 + parseInt(parts2[2], 10);
+  }
+
+  return null;
 }
 
 export default function VideoQuizTool() {
@@ -35,35 +75,36 @@ export default function VideoQuizTool() {
   const [videoDescription, setVideoDescription] = useState("");
   const [questions, setQuestions] = useState<VideoQuestion[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [tarFile, setTarFile] = useState<string | null>(null);
 
   const BACKEND = "http://localhost:8000";
 
-  // Convert timestamp to seconds
-  const timestampToSeconds = (timestamp: string): number => {
-    const parts = timestamp.split(':');
-    if (parts.length === 2) {
-      return parseInt(parts[0]) * 60 + parseInt(parts[1]);
-    }
-    return 0;
-  };
-
-  // Convert seconds to timestamp
-  const secondsToTimestamp = (seconds: number): string => {
-    const minutes = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
   // Step 1: Video information
   const handleNextToQuestions = () => {
-    if (videoTitle.trim() && videoUrl.trim()) {
-      setActiveStep(1);
+    setError(null);
+    if (!videoTitle.trim()) {
+      setError("Vui lòng nhập tiêu đề video.");
+      return;
     }
+    if (!videoUrl.trim()) {
+      setError("Vui lòng nhập URL video YouTube.");
+      return;
+    }
+    const ytId = extractYouTubeId(videoUrl);
+    if (!ytId) {
+      setError(
+        "URL video không phải là YouTube hợp lệ (ID 11 ký tự). " +
+        "In-Video Quiz chỉ hỗ trợ video YouTube (không áp dụng với iframe/raw HTML theo mục 3.7 tài liệu hướng dẫn)."
+      );
+      return;
+    }
+    setActiveStep(1);
   };
 
   // Step 2: Add question
   const handleAddQuestion = () => {
+    setError(null);
     const newQuestion: VideoQuestion = {
       id: `q_${Date.now()}`,
       question: "Câu hỏi mới",
@@ -79,12 +120,16 @@ export default function VideoQuizTool() {
 
   // Update question
   const handleUpdateQuestion = (index: number, field: keyof VideoQuestion, value: any) => {
+    setError(null);
     const newQuestions = [...questions];
     newQuestions[index] = { ...newQuestions[index], [field]: value };
     
     // Update seconds when timestamp changes
     if (field === 'timestamp') {
-      newQuestions[index].seconds = timestampToSeconds(value);
+      const sec = parseTimestampToSeconds(value);
+      if (sec !== null) {
+        newQuestions[index].seconds = sec;
+      }
     }
     
     setQuestions(newQuestions);
@@ -92,23 +137,72 @@ export default function VideoQuizTool() {
 
   // Delete question
   const handleDeleteQuestion = (index: number) => {
+    setError(null);
     setQuestions(questions.filter((_, i) => i !== index));
   };
 
   // Step 3: Export video quiz
   const handleExportVideoQuiz = async () => {
-    if (questions.length === 0) {
-      alert("Vui lòng thêm ít nhất một câu hỏi");
+    setError(null);
+
+    // Validate YouTube URL
+    const ytId = extractYouTubeId(videoUrl);
+    if (!ytId) {
+      setError(
+        "URL video không phải là YouTube hợp lệ (ID 11 ký tự). " +
+        "In-Video Quiz chỉ hỗ trợ video YouTube (không áp dụng với iframe/raw HTML theo mục 3.7 tài liệu hướng dẫn)."
+      );
       return;
+    }
+
+    if (questions.length === 0) {
+      setError("Vui lòng thêm ít nhất một câu hỏi cho video.");
+      return;
+    }
+
+    // Validate timestamps & check duplicates
+    const seenSeconds = new Map<number, string>();
+    const preparedQuestions: VideoQuestion[] = [];
+
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      if (!q.question.trim()) {
+        setError(`Câu hỏi ${i + 1} chưa có nội dung.`);
+        return;
+      }
+
+      const sec = parseTimestampToSeconds(q.timestamp);
+      if (sec === null || sec < 0) {
+        setError(
+          `Câu hỏi ${i + 1} có thời điểm xuất hiện "${q.timestamp}" không hợp lệ. ` +
+          "Vui lòng nhập định dạng MM:SS (ví dụ 01:30) hoặc số giây cố định (ví dụ 90)."
+        );
+        return;
+      }
+
+      if (seenSeconds.has(sec)) {
+        const prevTs = seenSeconds.get(sec);
+        setError(
+          `Phát hiện mốc thời gian bị trùng lặp: ${q.timestamp} (${sec} giây, trùng với ${prevTs}). ` +
+          "Mỗi mốc thời gian trong video chỉ được gắn một câu hỏi duy nhất."
+        );
+        return;
+      }
+
+      seenSeconds.set(sec, q.timestamp);
+      preparedQuestions.push({
+        ...q,
+        seconds: sec
+      });
     }
 
     setLoading(true);
     try {
       const formData = new FormData();
-      formData.append("video_title", videoTitle);
-      formData.append("video_url", videoUrl);
-      formData.append("video_description", videoDescription);
-      formData.append("questions", JSON.stringify(questions));
+      formData.append("video_title", videoTitle.trim());
+      formData.append("video_url", videoUrl.trim());
+      formData.append("video_description", videoDescription.trim());
+      formData.append("questions", JSON.stringify(preparedQuestions));
       
       const res = await fetch(`${BACKEND}/api/v1/export/video-quiz`, {
         method: "POST",
@@ -120,13 +214,14 @@ export default function VideoQuizTool() {
         setTarFile(data.tar_file);
         setActiveStep(2);
       } else {
-        alert("Có lỗi xảy ra khi export video quiz: " + (data.message || "Unknown error"));
+        setError(data.message || "Có lỗi xảy ra khi export video quiz.");
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Error exporting video quiz:", e);
-      alert("Có lỗi xảy ra khi export video quiz");
+      setError("Không thể kết nối đến server backend hoặc server gặp lỗi: " + (e?.message || ""));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -142,6 +237,12 @@ export default function VideoQuizTool() {
         ))}
       </Stepper>
 
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
       {activeStep === 0 && (
         <Paper sx={{ p: 3 }}>
           <Typography variant="h6" mb={2}>Bước 1: Thông tin video</Typography>
@@ -150,26 +251,33 @@ export default function VideoQuizTool() {
             fullWidth
             label="Tiêu đề video"
             value={videoTitle}
-            onChange={(e) => setVideoTitle(e.target.value)}
-            placeholder="Bài giảng về Địa lý Việt Nam"
+            onChange={(e) => {
+              setVideoTitle(e.target.value);
+              setError(null);
+            }}
+            placeholder="Bài giảng về Mạng máy tính"
             sx={{ mb: 2 }}
           />
           
           <TextField
             fullWidth
-            label="URL Video (YouTube hoặc file)"
+            label="URL Video YouTube"
             value={videoUrl}
-            onChange={(e) => setVideoUrl(e.target.value)}
+            onChange={(e) => {
+              setVideoUrl(e.target.value);
+              setError(null);
+            }}
             placeholder="https://www.youtube.com/watch?v=..."
+            helperText="Chỉ hỗ trợ video YouTube (mục 3.7: không áp dụng với iframe/raw HTML)"
             sx={{ mb: 2 }}
           />
           
           <TextField
             fullWidth
-            label="Mô tả video"
+            label="Mô tả video (tùy chọn)"
             value={videoDescription}
             onChange={(e) => setVideoDescription(e.target.value)}
-            placeholder="Video giới thiệu về địa lý tự nhiên Việt Nam"
+            placeholder="Video mô tả ngắn gọn..."
             multiline
             rows={2}
             sx={{ mb: 2 }}
@@ -217,10 +325,11 @@ export default function VideoQuizTool() {
                   
                   <TextField
                     fullWidth
-                    label="Thời điểm xuất hiện (MM:SS)"
+                    label="Thời điểm xuất hiện (MM:SS hoặc số giây)"
                     value={q.timestamp}
                     onChange={(e) => handleUpdateQuestion(index, 'timestamp', e.target.value)}
                     placeholder="01:30"
+                    helperText="Ví dụ: 01:00 (phút 1) hoặc 60. Các câu hỏi không được trùng mốc thời gian."
                     sx={{ mb: 2 }}
                   />
                   
@@ -240,45 +349,45 @@ export default function VideoQuizTool() {
                       value={q.type}
                       onChange={(e) => handleUpdateQuestion(index, 'type', e.target.value)}
                     >
-                      <MenuItem value="multiple_choice">Trắc nghiệm</MenuItem>
-                      <MenuItem value="multiple_select">Chọn nhiều</MenuItem>
-                      <MenuItem value="text_input">Nhập text</MenuItem>
-                      <MenuItem value="numerical">Nhập số</MenuItem>
+                      <MenuItem value="multiple_choice">Trắc nghiệm một đáp án</MenuItem>
+                      <MenuItem value="multiple_select">Chọn nhiều đáp án</MenuItem>
                     </Select>
                   </FormControl>
                   
-                  {q.type === 'multiple_choice' && (
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="body2" color="text.secondary" mb={1}>
-                        Lựa chọn:
-                      </Typography>
-                      {q.choices?.map((choice, choiceIndex) => (
-                        <TextField
-                          key={choiceIndex}
-                          fullWidth
-                          size="small"
-                          value={choice}
-                          onChange={(e) => {
-                            const newChoices = [...(q.choices || [])];
-                            newChoices[choiceIndex] = e.target.value;
-                            handleUpdateQuestion(index, 'choices', newChoices);
-                          }}
-                          placeholder={`Lựa chọn ${String.fromCharCode(65 + choiceIndex)}`}
-                          sx={{ mb: 1 }}
-                        />
-                      ))}
-                    </Box>
-                  )}
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="body2" color="text.secondary" mb={1}>
+                      Lựa chọn:
+                    </Typography>
+                    {q.choices?.map((choice, choiceIndex) => (
+                      <TextField
+                        key={choiceIndex}
+                        fullWidth
+                        size="small"
+                        value={choice}
+                        onChange={(e) => {
+                          const newChoices = [...(q.choices || [])];
+                          newChoices[choiceIndex] = e.target.value;
+                          handleUpdateQuestion(index, 'choices', newChoices);
+                        }}
+                        placeholder={`Lựa chọn ${String.fromCharCode(65 + choiceIndex)}`}
+                        sx={{ mb: 1 }}
+                      />
+                    ))}
+                  </Box>
                   
                   <TextField
                     fullWidth
-                    label="Đáp án đúng"
+                    label="Index đáp án đúng (bắt đầu từ 0)"
                     value={q.correct_answers.join(', ')}
                     onChange={(e) => {
-                      const answers = e.target.value.split(',').map(a => parseInt(a.trim())).filter(a => !isNaN(a));
+                      const answers = e.target.value
+                        .split(',')
+                        .map(a => parseInt(a.trim(), 10))
+                        .filter(a => !isNaN(a));
                       handleUpdateQuestion(index, 'correct_answers', answers);
                     }}
                     placeholder="0 hoặc 0, 1 cho nhiều đáp án"
+                    helperText="Ví dụ: 0 ứng với lựa chọn A, 1 ứng với B"
                     sx={{ mb: 2 }}
                   />
                 </Box>
@@ -286,14 +395,19 @@ export default function VideoQuizTool() {
             ))}
           </List>
           
-          <Button
-            variant="contained"
-            onClick={handleExportVideoQuiz}
-            disabled={loading || questions.length === 0}
-            startIcon={loading ? <CircularProgress size={20} /> : <UploadIcon />}
-          >
-            {loading ? "Đang tạo video quiz..." : "Tạo video quiz"}
-          </Button>
+          <Box sx={{ mt: 2, display: 'flex', gap: 2 }}>
+            <Button variant="outlined" onClick={() => setActiveStep(0)}>
+              Quay lại
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handleExportVideoQuiz}
+              disabled={loading || questions.length === 0}
+              startIcon={loading ? <CircularProgress size={20} /> : <UploadIcon />}
+            >
+              {loading ? "Đang tạo video quiz..." : "Tạo video quiz"}
+            </Button>
+          </Box>
         </Paper>
       )}
 
@@ -305,7 +419,7 @@ export default function VideoQuizTool() {
               <Alert severity="success" sx={{ mb: 2 }}>
                 Đã tạo video quiz thành công!
               </Alert>
-              <a href={`http://localhost:8000${tarFile}`} download>
+              <a href={`${BACKEND}${tarFile}`} download>
                 <Button variant="contained" sx={{ mb: 2 }}>
                   Tải về {videoTitle}.tar.gz
                 </Button>
@@ -318,10 +432,13 @@ export default function VideoQuizTool() {
                 {'\n'}4. Chọn chế độ Expand hoặc Replace
                 {'\n'}5. Kiểm tra lại video quiz trong khóa học
               </Typography>
+              <Button sx={{ mt: 2 }} variant="outlined" onClick={() => setActiveStep(1)}>
+                Chỉnh sửa lại câu hỏi
+              </Button>
             </>
           )}
         </Paper>
       )}
     </Box>
   );
-} 
+}

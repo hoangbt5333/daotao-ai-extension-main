@@ -7,11 +7,14 @@ import uuid
 import tempfile
 import tarfile
 import shutil
+import json
 import xml.etree.ElementTree as ET
 from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse, parse_qs
 from app.services.export.base import Exporter
 from app.services.export.helpers import resolve_question_display_name
+from app.services.export.video_quiz_helper import build_invideoquiz_unit
+from app.services.export.video_quiz_helper import extract_youtube_id
 from app.core.logging import get_logger
 
 
@@ -94,6 +97,7 @@ class OpenEdXExporter(Exporter):
         self.current_course_dir = course_dir  # Store for video XML creation
         
         # Process outline and create XML files
+        has_video_quiz = False
         chapter_ids = []
         sequential_ids = []
         vertical_ids = []
@@ -120,9 +124,20 @@ class OpenEdXExporter(Exporter):
                     vertical_ids.append(vertical_id)
                     
                     # Create vertical XML
-                    vertical_xml = self._create_vertical_xml(unit.get('title', 'Untitled Unit'), unit, vertical_id)
-                    with open(os.path.join(course_dir, 'vertical', f'{vertical_id}.xml'), 'w', encoding='utf-8') as f:
-                        f.write(vertical_xml)
+                    u_type = (unit.get('type') or '').strip().lower()
+                    if u_type == 'video_quiz':
+                        has_video_quiz = True
+                        build_invideoquiz_unit(
+                            course_dir=course_dir,
+                            unit_title=unit.get('title', 'Untitled Unit'),
+                            video_url=unit.get('video_url', ''),
+                            questions=unit.get('questions', []),
+                            vertical_id=vertical_id,
+                        )
+                    else:
+                        vertical_xml = self._create_vertical_xml(unit.get('title', 'Untitled Unit'), unit, vertical_id)
+                        with open(os.path.join(course_dir, 'vertical', f'{vertical_id}.xml'), 'w', encoding='utf-8') as f:
+                            f.write(vertical_xml)
                 
                 # Create sequential XML with vertical references
                 sequential_xml = self._create_sequential_xml_with_references(subsection.get('title', 'Untitled Subsection'), sequential_vertical_ids)
@@ -145,6 +160,9 @@ class OpenEdXExporter(Exporter):
         
         # Create final course.xml with chapter references
         self._create_final_course_xml(course_dir, chapter_ids)
+
+        # Ensure policies/{run}/policy.json declared advanced_modules if video quiz present
+        self._ensure_policy_json(course_dir, run="2024-May", has_video_quiz=has_video_quiz)
     
     def _generate_uuid(self) -> str:
         """Generate UUID for OpenEdX components"""
@@ -426,36 +444,7 @@ class OpenEdXExporter(Exporter):
 
     def _extract_youtube_id(self, url: str) -> Optional[str]:
         """Extract YouTube video ID from various URL formats."""
-        try:
-            parsed = urlparse(url)
-            host = (parsed.netloc or '').lower()
-            if 'youtube.com' in host:
-                # watch?v=ID
-                qs = parse_qs(parsed.query)
-                if 'v' in qs and qs['v']:
-                    vid = qs['v'][0]
-                    if re.fullmatch(r'[A-Za-z0-9_-]{11}', vid):
-                        return vid
-                # /embed/ID
-                path_parts = [p for p in parsed.path.split('/') if p]
-                if len(path_parts) >= 2 and path_parts[0] == 'embed':
-                    vid = path_parts[1]
-                    if re.fullmatch(r'[A-Za-z0-9_-]{11}', vid):
-                        return vid
-            if 'youtu.be' in host:
-                # youtu.be/ID
-                path_parts = [p for p in parsed.path.split('/') if p]
-                if path_parts:
-                    vid = path_parts[0]
-                    if re.fullmatch(r'[A-Za-z0-9_-]{11}', vid):
-                        return vid
-            # Fallback regex
-            m = re.search(r'(?:v=|be/|embed/)([A-Za-z0-9_-]{11})', url)
-            if m:
-                return m.group(1)
-        except Exception:
-            pass
-        return None
+        return extract_youtube_id(url)
     
     def _create_html_for_pdf(self, pdf_filename: str, vertical_id: str):
         """Create HTML file for PDF content"""
@@ -582,6 +571,8 @@ class OpenEdXExporter(Exporter):
         for asset_path in asset_paths:
             if os.path.exists(asset_path):
                 filename = os.path.basename(asset_path)
+                if filename.lower().endswith('.txt'):
+                    continue  # Quiz questions must never leak to course/static/
                 dest_path = os.path.join(static_dir, filename)
                 shutil.copy2(asset_path, dest_path)
                 self.logger.info(f"Copied asset to static: {filename}")
@@ -644,3 +635,35 @@ class OpenEdXExporter(Exporter):
                     file_path = os.path.join(root, file)
                     arcname = os.path.relpath(file_path, source_dir)
                     tar.add(file_path, arcname=arcname) 
+    def _ensure_policy_json(self, course_dir: str, run: str, has_video_quiz: bool):
+        """Ensure policies/{run}/policy.json includes advanced_modules if video quiz is present.
+        Merges into existing policy without overwriting other keys.
+        """
+        if not has_video_quiz:
+            return
+
+        run_policy_dir = os.path.join(course_dir, "policies", run)
+        os.makedirs(run_policy_dir, exist_ok=True)
+        policy_path = os.path.join(run_policy_dir, "policy.json")
+
+        policy_data = {}
+        if os.path.exists(policy_path):
+            try:
+                with open(policy_path, "r", encoding="utf-8") as f:
+                    policy_data = json.load(f)
+            except Exception:
+                policy_data = {}
+
+        course_key = f"course/{run}"
+        if course_key not in policy_data:
+            policy_data[course_key] = {}
+
+        adv = policy_data[course_key].get("advanced_modules", [])
+        if not isinstance(adv, list):
+            adv = []
+        if "invideoquiz_v2" not in adv:
+            adv.append("invideoquiz_v2")
+        policy_data[course_key]["advanced_modules"] = adv
+
+        with open(policy_path, "w", encoding="utf-8") as f:
+            json.dump(policy_data, f, ensure_ascii=False, indent=2)

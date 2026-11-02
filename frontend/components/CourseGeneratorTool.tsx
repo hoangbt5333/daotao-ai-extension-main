@@ -93,15 +93,22 @@ export default function CourseGeneratorTool() {
   };
   // removed legacy text/LLM handlers
 
-  // Handle folder upload for PDF and Audio files
+  // Handle folder upload for PDF, Audio, and Quiz text files
   const handleFolderUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     const assetFiles = files.filter(file => {
       const name = file.name.toLowerCase();
-      return name.endsWith('.pdf') || name.endsWith('.mp3') || file.type === 'application/pdf' || file.type.startsWith('audio/');
+      return (
+        name.endsWith('.pdf') ||
+        name.endsWith('.mp3') ||
+        name.endsWith('.txt') ||
+        file.type === 'application/pdf' ||
+        file.type.startsWith('audio/') ||
+        file.type === 'text/plain'
+      );
     });
     setPdfFiles(assetFiles);
-    setMappingStatus(`Đã chọn ${assetFiles.length} file (PDF/Audio)`);
+    setMappingStatus(`Đã chọn ${assetFiles.length} file (PDF/Audio/Quiz .txt)`);
   };
 
   // Auto-map PDF files to outline
@@ -252,7 +259,7 @@ export default function CourseGeneratorTool() {
                   <li>
                     <b>Header tùy chọn:</b>
                     <ul style={{ margin: '4px 0', paddingLeft: 18 }}>
-                      <li><code>Type</code>: Loại bài học (<code>audio</code>, <code>pdf</code>, <code>video</code>, <code>video_pdf</code>, <code>embed</code>, <code>text</code>).</li>
+                      <li><code>Type</code>: Loại bài học (<code>audio</code>, <code>pdf</code>, <code>video</code>, <code>video_quiz</code>, <code>video_pdf</code>, <code>embed</code>, <code>text</code>).</li>
                       <li><code>Content</code>: Tên file (PDF/MP3), liên kết (YouTube/Video/GDrive/SharePoint), mã nhúng <code>&lt;iframe&gt;</code>, hoặc nội dung văn bản.</li>
                       <li><code>Slide</code>, <code>Youtube</code>: Cột truyền thống (vẫn hỗ trợ 100% để tương thích ngược với file mẫu cũ).</li>
                     </ul>
@@ -266,6 +273,7 @@ export default function CourseGeneratorTool() {
                           <li><code>Type = audio</code>: Bài giảng âm thanh. Cột <code>Content</code> (hoặc <code>Slide</code>) điền tên file MP3 (ví dụ: <code>bai1.mp3</code>). Tải file lên ở mục 2 bên dưới.</li>
                           <li><code>Type = pdf</code>: Bài giảng tài liệu. Cột <code>Content</code> (hoặc <code>Slide</code>) điền tên file PDF (ví dụ: <code>bai1.pdf</code>). Tải file lên ở mục 2 bên dưới.</li>
                           <li><code>Type = video</code>: Cột <code>Content</code> (hoặc <code>Youtube</code>) điền URL YouTube hoặc link video.</li>
+                          <li><code>Type = video_quiz</code>: Video có câu hỏi dừng tương tác (invideoquiz_v2). Cột <code>Content</code> điền tên file câu hỏi <code>.txt</code> (ví dụ: <code>quiz_bai1.txt</code>) và cột <code>Youtube</code> điền URL YouTube (hoặc ngược lại). Tải file <code>.txt</code> lên ở mục 2 bên dưới.</li>
                           <li><code>Type = video_pdf</code>: Kết hợp xem video và slide PDF (khai báo link video và file slide tương ứng).</li>
                           <li><code>Type = embed</code> (hoặc <code>iframe</code>): Nhúng Google Drive, SharePoint, OneDrive, Stream. Cột <code>Content</code> dán link chia sẻ hoặc mã <code>&lt;iframe&gt;</code> (link Google Drive sẽ tự động tạo iframe preview).</li>
                           <li><code>Type = text</code>: Cột <code>Content</code> điền văn bản hoặc mã HTML trực tiếp.</li>
@@ -283,7 +291,7 @@ export default function CourseGeneratorTool() {
                     </ul>
                   </li>
                   <li>
-                    <b>Tải lên tài nguyên (Mục 2):</b> Các file PDF (<code>.pdf</code>) hoặc âm thanh (<code>.mp3</code>) có tên trong outline cần được chọn ở <i>Mục 2</i> để hệ thống tự động copy vào gói khóa học (<code>course/static/</code>).
+                    <b>Tải lên tài nguyên (Mục 2):</b> Các file PDF (<code>.pdf</code>), âm thanh (<code>.mp3</code>), hoặc file câu hỏi Quiz (<code>.txt</code>) có tên trong outline cần được chọn ở <i>Mục 2</i> để hệ thống tự động copy vào gói khóa học (<code>course/static/</code>) hoặc cấu hình bài tập video.
                   </li>
                   <li>
                     <b>Gộp unit:</b> Các dòng trùng bộ <i>Chapter + Lesson + Unit</i> sẽ được tự động hợp nhất vào 1 unit (ví dụ dòng 1 có YouTube, dòng 2 có Slide).
@@ -345,14 +353,14 @@ export default function CourseGeneratorTool() {
           {/* Removed text/LLM upload flow; only Excel/CSV import remains */}
 
           <Paper sx={{ p: 2, mb: 3 }}>
-            <Typography variant="h6" mb={2}>2. Upload folder PDF slides / Audio (tùy chọn)</Typography>
+            <Typography variant="h6" mb={2}>2. Upload folder PDF slides / Audio / Câu hỏi Quiz .txt (tùy chọn)</Typography>
             <Typography variant="body2" color="text.secondary" mb={2}>
-              Upload folder chứa các file PDF slides hoặc file audio MP3. Hệ thống sẽ tự động phân tích và đưa vào gói tài nguyên.
+              Upload folder hoặc chọn các file PDF slides, file audio MP3, hoặc file câu hỏi Quiz (.txt). Hệ thống sẽ tự động phân tích và đưa vào gói tài nguyên tương ứng.
             </Typography>
             <input
               type="file"
               multiple
-              accept=".pdf,.mp3,audio/*"
+              accept=".pdf,.mp3,.txt,audio/*,text/plain"
               onChange={handleFolderUpload}
               style={{ display: 'none' }}
               id="pdf-folder-upload"
@@ -364,13 +372,13 @@ export default function CourseGeneratorTool() {
                 startIcon={<FolderIcon />}
                 sx={{ mr: 2 }}
               >
-                Chọn files PDF / Audio
+                Chọn files PDF / Audio / Quiz .txt
               </Button>
             </label>
             {pdfFiles.length > 0 && (
               <Box sx={{ mt: 2 }}>
                 <Typography variant="body2" color="primary">
-                  {mappingStatus || `Đã chọn ${pdfFiles.length} file (PDF/Audio)`}
+                  {mappingStatus || `Đã chọn ${pdfFiles.length} file (PDF/Audio/Quiz .txt)`}
                 </Typography>
                 <Box sx={{ mt: 1, maxHeight: 200, overflow: 'auto' }}>
                   {pdfFiles.map((file, index) => (

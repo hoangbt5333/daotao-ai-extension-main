@@ -19,12 +19,15 @@ ALL_KNOWN_HEADERS = REQUIRED_HEADERS + OPTIONAL_HEADERS
 EXPECTED_HEADERS = REQUIRED_HEADERS + ["Slide", "Youtube"]  # Backward compatibility
 TEMPLATE_HEADERS = ["Chapter", "Lesson", "Unit", "Type", "Content", "Slide", "Youtube"]
 
-SUPPORTED_UNIT_TYPES = ["video", "pdf", "audio", "video_pdf", "embed", "text"]
+SUPPORTED_UNIT_TYPES = ["video", "pdf", "audio", "video_pdf", "embed", "text", "video_quiz"]
 TYPE_ALIASES = {
     "raw_html": "embed",
     "html_raw": "embed",
     "iframe": "embed",
     "html": "text",
+    "invideoquiz": "video_quiz",
+    "invideoquiz_v2": "video_quiz",
+    "quiz_in_video": "video_quiz",
 }
 
 
@@ -210,6 +213,24 @@ def _build_outline(rows: List[Dict[str, str]]) -> Dict[str, Any]:
             elif tp_norm in ["text", "html"]:
                 u["type"] = "text"
                 u["html_content"] = ct
+            elif tp_norm == "video_quiz":
+                u["type"] = "video_quiz"
+                if yt:
+                    u["video_url"] = yt
+                elif ct and ("youtube" in ct.lower() or "youtu.be" in ct.lower()):
+                    u["video_url"] = ct
+                if sl and sl.lower().endswith(".txt"):
+                    u["quiz_file"] = sl
+                    u["content"] = sl
+                elif ct and ct.lower().endswith(".txt"):
+                    u["quiz_file"] = ct
+                    u["content"] = ct
+                elif ct and not ("youtube" in ct.lower() or "youtu.be" in ct.lower()):
+                    u["quiz_file"] = ct
+                    u["content"] = ct
+                elif sl and not ("youtube" in sl.lower() or "youtu.be" in sl.lower()):
+                    u["quiz_file"] = sl
+                    u["content"] = sl
             else:
                 # Type tùy chỉnh khác
                 u["type"] = tp_norm
@@ -416,11 +437,21 @@ def generate_outline_template_excel(settings=None) -> BytesIO:
             "slide_ly_thuyet_bai_2.pdf",
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         ],
-        # 5. embed
+        # 5. video_quiz
         [
             "",
-            "Bài 2.2: Tài liệu tương tác trực tuyến",
-            "2.2.1 Tài liệu nhúng Google Drive",
+            "Bài 2.2: Video tương tác (In-Video Quiz)",
+            "2.2.1 Video bài giảng có câu hỏi tương tác",
+            "video_quiz",
+            "cau_hoi_bai_2_2.txt",
+            "",
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        ],
+        # 6. embed
+        [
+            "",
+            "Bài 2.3: Tài liệu tương tác trực tuyến",
+            "2.3.1 Tài liệu nhúng Google Drive",
             "embed",
             "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/preview",
             "",
@@ -488,6 +519,7 @@ def generate_outline_template_excel(settings=None) -> BytesIO:
         ("• pdf: Tài liệu bài giảng PDF. Cột Content điền tên file PDF (ví dụ: bai1.pdf). Upload file ở mục 'Chọn files PDF / Audio'.", normal_font),
         ("• audio: Bài giảng âm thanh MP3. Cột Content điền tên file audio (ví dụ: bai1.mp3). Upload file ở mục 'Chọn files PDF / Audio'.", normal_font),
         ("• video_pdf: Bài giảng tích hợp video và slide PDF. Có thể khai báo đồng thời video và slide tương ứng.", normal_font),
+        ("• video_quiz: Bài giảng video có câu hỏi tương tác ngắt quãng (In-Video Quiz). Cột Content điền tên file câu hỏi (.txt), cột Youtube điền link YouTube. File câu hỏi (.txt) soạn theo cú pháp QuestionBank kèm dòng @time: cho mỗi câu.", normal_font),
         ("• embed: Nhúng tài liệu ngoài (Google Drive, OneDrive, SharePoint, Stream). Cột Content dán link chia sẻ hoặc mã <iframe>.", normal_font),
         ("• text: Bài giảng văn bản hoặc mã HTML trực tiếp trong cột Content.", normal_font),
         ("", normal_font),
