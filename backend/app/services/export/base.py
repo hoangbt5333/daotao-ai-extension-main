@@ -104,6 +104,8 @@ class ExportService:
             
             return result
             
+        except ExportError:
+            raise
         except Exception as e:
             self.logger.error(f"Error during {export_type} export: {e}")
             raise ExportError(f"Export failed: {str(e)}", export_type)

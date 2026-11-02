@@ -41,6 +41,8 @@ interface Question {
   type: string;
   choices: string[];
   correct_answers: number[];
+  fixed_choices?: number[];
+  shuffle?: boolean;
   tags: string[];
   topic?: string;
   is_valid?: boolean;
@@ -299,17 +301,26 @@ Câu hỏi 2: Đáp án đúng ở ngay dòng đầu tiên?
             )}
             {parseMode === 'multiple_select' && (
               <Alert severity="info" sx={{ mb: 1 }}>
-                <strong>Hướng dẫn cú pháp — Multiple Selection (nhiều đáp án đúng):</strong><br/>
+                <strong>Hướng dẫn cú pháp — Nhiều đáp án đúng (Open edX Standard):</strong><br/>
                 <pre style={{ margin: '8px 0', fontFamily: 'monospace', fontSize: '0.85em', background: '#f5f5f5', padding: '8px', borderRadius: '4px' }}>
 {`de0
-Câu hỏi có nhiều đáp án đúng?
-[x] Đáp án đúng 1
-[x] Đáp án đúng 2
-[ ] Đáp án sai 1
-[ ] Đáp án sai 2`}
+Câu hỏi 1: Có nhiều đáp án đúng (tất cả phương án đều được đảo ngẫu nhiên)?
+[! ] Phương án A (sai, dòng đầu có dấu ! để kích hoạt xáo trộn đề thi)
+[x] Phương án B (đáp án đúng)
+[x] Phương án C (đáp án đúng)
+[@] Phương án D (cố định ở cuối: Tất cả đều sai)
+
+@tag: Java, Lập trình
+Câu hỏi 2: Đáp án đúng ở ngay dòng đầu tiên?
+[!x] Phương án A (vừa đúng vừa kích hoạt xáo trộn)
+[x] Phương án B (đúng)
+[ ] Phương án C (sai)`}
                 </pre>
-                • Dùng <code>[x]</code> cho các đáp án đúng, <code>[ ]</code> cho các đáp án sai.<br/>
-                • Có thể thêm <code>de0</code>, <code>de1</code>… hoặc <code>@tag: tag1, tag2</code> trước câu hỏi.
+                <strong>Quy ước cú pháp:</strong><br/>
+                • <strong>Dòng đầu tiên:</strong> Dùng <code>[! ]</code> (nếu sai) hoặc <code>[!x]</code> (nếu đúng) để kích hoạt xáo trộn thứ tự đáp án khi thi.<br/>
+                • <strong>Các dòng sau:</strong> Dùng <code>[x]</code> cho đáp án đúng bình thường, <code>[ ]</code> cho đáp án sai bình thường.<br/>
+                • <strong>Cố định vị trí:</strong> Dùng <code>[@]</code> (hoặc <code>[@x]</code>) cho phương án không được xáo trộn (ví dụ câu *"Tất cả các phương án trên đều đúng"* hoặc *"Cả A và B đều đúng"*).<br/>
+                • <strong>Gán nhãn:</strong> <code>de0</code>, <code>de1</code>… ở đầu block hoặc <code>@tag: tag1, tag2</code> ngay trước câu hỏi.
               </Alert>
             )}
           </Collapse>

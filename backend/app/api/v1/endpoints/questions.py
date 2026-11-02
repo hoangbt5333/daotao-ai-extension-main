@@ -567,19 +567,21 @@ def parse_questions_from_text(questions_text, tags_list=None, parse_group_tags=F
 
 
 def parse_multiple_select_questions_from_text(questions_text, tags_list=None, parse_group_tags=False):
-    """Parser for multiple selection format: [x]/[ ]"""
+    """Parser for multiple selection format: [x], [X], [ ], [], [!x], [! ], [@], [@x]"""
     questions = []
     lines = [l.strip() for l in questions_text.strip().split('\n') if l.strip()]
     current_question = None
     current_choices = []
     current_correct_answers = []
+    current_fixed_choices = []
+    current_shuffle = True
     current_de_tag = None
     current_group_tags = []
     question_de_tag = None
     question_group_tags = []
     user_tags = [tag for tag in (tags_list or []) if not tag.startswith('de')]
     de_tags = ['de0', 'de1', 'de2', 'de3', 'de4', 'de5', 'de6']
-    de_index = 0
+
     for line in lines:
         group_tag_marker = _parse_group_tag_marker(line) if parse_group_tags else None
         if group_tag_marker is not None:
@@ -590,8 +592,11 @@ def parse_multiple_select_questions_from_text(questions_text, tags_list=None, pa
         if line.startswith('de') and any(line.startswith(tag) for tag in de_tags):
             current_de_tag = line
             continue
-        # Check if line is a question (not [x]/[ ])
-        if not (line.startswith('[x]') or line.startswith('[ ]')):
+
+        # Check if line starts with choice marker pattern: e.g. [ ], [x], [X], [], [!], [!x], [@], [@x], [x@]
+        marker_match = re.match(r'^\s*\[([!xX@\s]*)\]\s*(.*)', line)
+        if not marker_match:
+            # Đây là dòng câu hỏi mới (không có marker [ ])
             # Nếu có câu hỏi trước đó thì lưu lại
             if current_question and current_choices:
                 question_tags = _merge_question_tags(
@@ -604,6 +609,8 @@ def parse_multiple_select_questions_from_text(questions_text, tags_list=None, pa
                     "type": "multiple_select",
                     "choices": current_choices,
                     "correct_answers": current_correct_answers,
+                    "fixed_choices": current_fixed_choices,
+                    "shuffle": current_shuffle,
                     "tags": question_tags,
                     "topic": "",
                     "is_valid": True,
@@ -615,14 +622,29 @@ def parse_multiple_select_questions_from_text(questions_text, tags_list=None, pa
             question_group_tags = current_group_tags
             current_choices = []
             current_correct_answers = []
+            current_fixed_choices = []
+            current_shuffle = True
         else:
-            # Đây là đáp án
-            is_correct = line.startswith('[x]')
-            choice_text = line[3:].strip()
-            if choice_text:
-                current_choices.append(choice_text)
-                if is_correct:
-                    current_correct_answers.append(len(current_choices) - 1)
+            # Đây là dòng đáp án
+            marker_str = marker_match.group(1).strip().lower()
+            choice_text = marker_match.group(2).strip()
+
+            choice_idx = len(current_choices)
+            current_choices.append(choice_text)
+
+            # Kiểm tra đáp án đúng (có chứa 'x')
+            if 'x' in marker_str:
+                current_correct_answers.append(choice_idx)
+
+            # Kiểm tra cố định vị trí (có '@' hoặc '!' ở dòng không phải đầu tiên)
+            if '@' in marker_str:
+                current_fixed_choices.append(choice_idx)
+            elif '!' in marker_str:
+                if choice_idx == 0:
+                    current_shuffle = True  # '!' ở dòng đầu tiên kích hoạt shuffle trong Open edX
+                else:
+                    current_fixed_choices.append(choice_idx)
+
     # Đừng quên câu hỏi cuối cùng
     if current_question and current_choices:
         question_tags = _merge_question_tags(
@@ -635,6 +657,8 @@ def parse_multiple_select_questions_from_text(questions_text, tags_list=None, pa
             "type": "multiple_select",
             "choices": current_choices,
             "correct_answers": current_correct_answers,
+            "fixed_choices": current_fixed_choices,
+            "shuffle": current_shuffle,
             "tags": question_tags,
             "topic": "",
             "is_valid": True,

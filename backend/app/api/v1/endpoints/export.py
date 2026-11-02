@@ -454,10 +454,17 @@ async def export_video_quiz(
             export_type="video_quiz",
             message=f"Invalid JSON data: {str(e)}"
         )
+    except ExportError as e:
+        return ExportResponse(
+            success=False,
+            tar_file="",
+            export_type="video_quiz",
+            message=str(e)
+        )
     except Exception as e:
         return ExportResponse(
             success=False,
             tar_file="",
             export_type="video_quiz",
             message=f"Video quiz export failed: {str(e)}"
-        ) 
+        )

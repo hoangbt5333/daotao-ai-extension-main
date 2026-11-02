@@ -12,6 +12,7 @@ from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse, parse_qs
 from app.services.export.base import Exporter
 from app.services.export.helpers import resolve_question_display_name
+from app.services.export.video_quiz_helper import extract_youtube_id
 from app.core.logging import get_logger
 
 
@@ -426,36 +427,7 @@ class OpenEdXExporter(Exporter):
 
     def _extract_youtube_id(self, url: str) -> Optional[str]:
         """Extract YouTube video ID from various URL formats."""
-        try:
-            parsed = urlparse(url)
-            host = (parsed.netloc or '').lower()
-            if 'youtube.com' in host:
-                # watch?v=ID
-                qs = parse_qs(parsed.query)
-                if 'v' in qs and qs['v']:
-                    vid = qs['v'][0]
-                    if re.fullmatch(r'[A-Za-z0-9_-]{11}', vid):
-                        return vid
-                # /embed/ID
-                path_parts = [p for p in parsed.path.split('/') if p]
-                if len(path_parts) >= 2 and path_parts[0] == 'embed':
-                    vid = path_parts[1]
-                    if re.fullmatch(r'[A-Za-z0-9_-]{11}', vid):
-                        return vid
-            if 'youtu.be' in host:
-                # youtu.be/ID
-                path_parts = [p for p in parsed.path.split('/') if p]
-                if path_parts:
-                    vid = path_parts[0]
-                    if re.fullmatch(r'[A-Za-z0-9_-]{11}', vid):
-                        return vid
-            # Fallback regex
-            m = re.search(r'(?:v=|be/|embed/)([A-Za-z0-9_-]{11})', url)
-            if m:
-                return m.group(1)
-        except Exception:
-            pass
-        return None
+        return extract_youtube_id(url)
     
     def _create_html_for_pdf(self, pdf_filename: str, vertical_id: str):
         """Create HTML file for PDF content"""
