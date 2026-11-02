@@ -8,7 +8,8 @@ import json
 import xml.etree.ElementTree as ET
 from typing import Dict, Any, List, Optional, Tuple
 from urllib.parse import urlparse, parse_qs
-from app.services.export.helpers import resolve_question_display_name
+from lxml import etree
+from app.services.export.helpers import resolve_question_display_name, build_single_problem_xml
 
 
 def generate_uuid() -> str:
@@ -130,70 +131,6 @@ def parse_timestamp_to_seconds(ts: Any) -> int:
     raise ValueError(f"Định dạng mốc thời gian không hợp lệ: '{ts}'. Cần dạng MM:SS hoặc số giây cố định.")
 
 
-def build_single_problem_xml(question_data: Dict[str, Any], display_name: str) -> str:
-    """
-    Create a single problem XML file matching OpenEdX OLX format using real XML elements.
-    Never assigns markup strings to .text, preventing XML escaping.
-    """
-    problem_elem = ET.Element("problem")
-    problem_elem.set("display_name", display_name)
-
-    # Optional tags attribute if provided
-    tags_list = question_data.get("tags")
-    if tags_list:
-        if isinstance(tags_list, str):
-            tags_list = [t.strip() for t in tags_list.split(",") if t.strip()]
-        if isinstance(tags_list, list) and tags_list:
-            problem_elem.set("tags", json.dumps(tags_list, ensure_ascii=False))
-
-    q_type = question_data.get("type", "multiple_choice")
-    q_text = question_data.get("question", "")
-    choices = question_data.get("choices", [])
-    correct_answers = question_data.get("correct_answers", [])
-    if not correct_answers and "correct_answer" in question_data:
-        ca = question_data["correct_answer"]
-        if isinstance(ca, int):
-            correct_answers = [ca]
-        elif isinstance(ca, list):
-            correct_answers = ca
-
-    fixed_choices = question_data.get("fixed_choices", [])
-
-    if q_type == "multiple_select":
-        resp_elem = ET.SubElement(problem_elem, "choiceresponse")
-        p_elem = ET.SubElement(resp_elem, "p")
-        p_elem.text = q_text
-        cbg_elem = ET.SubElement(resp_elem, "checkboxgroup")
-        for i, choice in enumerate(choices):
-            is_correct = "true" if i in correct_answers else "false"
-            choice_attrs = {"correct": is_correct}
-            if i in fixed_choices:
-                choice_attrs["fixed"] = "true"
-            c_elem = ET.SubElement(cbg_elem, "choice", attrib=choice_attrs)
-            c_elem.text = str(choice)
-    else:  # default multiple_choice
-        resp_elem = ET.SubElement(problem_elem, "multiplechoiceresponse")
-        p_elem = ET.SubElement(resp_elem, "p")
-        p_elem.text = q_text
-        cg_elem = ET.SubElement(resp_elem, "choicegroup")
-        cg_elem.set("type", "MultipleChoice")
-        cg_elem.set("shuffle", "true")
-        for i, choice in enumerate(choices):
-            is_correct = "true" if i in correct_answers else "false"
-            choice_attrs = {"correct": is_correct}
-            if i in fixed_choices:
-                choice_attrs["fixed"] = "true"
-            c_elem = ET.SubElement(cg_elem, "choice", attrib=choice_attrs)
-            c_elem.text = str(choice)
-
-    try:
-        ET.indent(problem_elem, space="  ")
-    except AttributeError:
-        pass
-
-    return ET.tostring(problem_elem, encoding="unicode")
-
-
 def build_invideoquiz_unit(
     course_dir: str,
     unit_title: str,
@@ -291,7 +228,8 @@ def build_invideoquiz_unit(
         timemap[str(sec)] = prob_id
         
         display_name = resolve_question_display_name(q, idx, used_names)
-        prob_xml = build_single_problem_xml(q, display_name)
+        prob_elem = build_single_problem_xml(q, display_name=display_name)
+        prob_xml = etree.tostring(prob_elem, encoding="unicode", pretty_print=True)
         with open(os.path.join(course_dir, "problem", f"{prob_id}.xml"), "w", encoding="utf-8") as f:
             f.write(prob_xml)
             
