@@ -10,6 +10,7 @@ import FolderIcon from '@mui/icons-material/Folder';
 import UploadIcon from '@mui/icons-material/Upload';
 import DownloadIcon from '@mui/icons-material/Download';
 import { getApiUrl, API_ENDPOINTS } from "../config/api";
+import { mergeFiles } from "../utils/fileHelpers";
 
 const steps = [
   "Nhập outline",
@@ -96,6 +97,8 @@ export default function CourseGeneratorTool() {
   // Handle folder upload for PDF, Audio, and Quiz text files
   const handleFolderUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
     const assetFiles = files.filter(file => {
       const name = file.name.toLowerCase();
       return (
@@ -107,8 +110,31 @@ export default function CourseGeneratorTool() {
         file.type === 'text/plain'
       );
     });
-    setPdfFiles(assetFiles);
-    setMappingStatus(`Đã chọn ${assetFiles.length} file (PDF/Audio/Quiz .txt)`);
+
+    if (assetFiles.length === 0) {
+      setSnackbar({
+        open: true,
+        message: "Không tìm thấy file hợp lệ (.pdf, .mp3, .txt)",
+        severity: 'error'
+      });
+      event.target.value = '';
+      return;
+    }
+
+    const { merged, replacedNames } = mergeFiles(pdfFiles, assetFiles);
+    setPdfFiles(merged);
+    setMappingStatus(`Đã chọn ${merged.length} file (PDF/Audio/Quiz .txt)`);
+
+    if (replacedNames.length > 0) {
+      setSnackbar({
+        open: true,
+        message: `Đã thay file ${replacedNames.join(', ')}`,
+        severity: 'info'
+      });
+    }
+
+    // Đặt lại input.value sau mỗi lần chọn để có thể chọn lại cùng file
+    event.target.value = '';
   };
 
   // Auto-map PDF files to outline
