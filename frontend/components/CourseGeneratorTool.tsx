@@ -64,6 +64,8 @@ export default function CourseGeneratorTool() {
   const [excelWarnings, setExcelWarnings] = useState<string[]>([]);
   const [excelOutlinePreview, setExcelOutlinePreview] = useState<OutlineData | null>(null);
   const [confirmClearAll, setConfirmClearAll] = useState(false);
+  const [mappedFileNames, setMappedFileNames] = useState<string[]>([]);
+  const [unmatchedFiles, setUnmatchedFiles] = useState<string[]>([]);
 
   const getFileIcon = (fileName: string) => {
     const lower = fileName.toLowerCase();
@@ -95,6 +97,8 @@ export default function CourseGeneratorTool() {
   const handleConfirmClearAll = () => {
     setPdfFiles([]);
     setMappingStatus("");
+    setMappedFileNames([]);
+    setUnmatchedFiles([]);
     setConfirmClearAll(false);
     setSnackbar({
       open: true,
@@ -220,28 +224,51 @@ export default function CourseGeneratorTool() {
       });
     }
 
+    // Khi thêm file, chỉ khớp tự động các file MỚI (nếu đã có outline và đã từng mapping hoặc có file mới)
+    if (outline && outline.outline.length > 0 && mappedFileNames.length > 0) {
+      const newlyAddedFiles = assetFiles.filter(f => !mappedFileNames.includes(f.name.toLowerCase()));
+      if (newlyAddedFiles.length > 0) {
+        handleAutoMapPdfs(true, newlyAddedFiles);
+      }
+    }
+
     // Đặt lại input.value sau mỗi lần chọn để có thể chọn lại cùng file
     event.target.value = '';
   };
 
   // Auto-map PDF files to outline
-  const handleAutoMapPdfs = async () => {
-    if (pdfFiles.length === 0 || outline.outline.length === 0) {
-      setSnackbar({open: true, message: "Vui lòng upload PDF files và tạo outline trước!", severity: 'error'});
+  const handleAutoMapPdfs = async (incrementalMode: boolean = false, overrideFiles?: File[]) => {
+    const filesToMap = overrideFiles || (incrementalMode 
+      ? pdfFiles.filter(f => !mappedFileNames.includes(f.name.toLowerCase()))
+      : pdfFiles);
+
+    if (filesToMap.length === 0 || outline.outline.length === 0) {
+      setSnackbar({
+        open: true, 
+        message: outline.outline.length === 0 
+          ? "Vui lòng import outline trước!" 
+          : "Không có file mới nào cần mapping!", 
+        severity: 'info'
+      });
       return;
     }
 
     setLoading(true);
-    setMappingStatus("Đang phân tích và mapping PDF files...");
+    setMappingStatus(incrementalMode 
+      ? `Đang phân tích và mapping ${filesToMap.length} file mới...` 
+      : "Đang phân tích và mapping PDF files...");
 
     try {
       const formData = new FormData();
-      pdfFiles.forEach((file, index) => {
+      filesToMap.forEach((file) => {
         formData.append(`files`, file);
       });
       formData.append("outline", JSON.stringify(outline));
+      if (incrementalMode) {
+        formData.append("incremental", "true");
+      }
 
-      console.log("Sending outline to backend:", outline);
+      console.log("Sending outline to backend, incremental:", incrementalMode, outline);
 
       const res = await fetch(getApiUrl(API_ENDPOINTS.MAPPING_PDFS), {
         method: "POST",
@@ -255,8 +282,30 @@ export default function CourseGeneratorTool() {
       if (data.success) {
         console.log("Mapped outline received:", data.mapped_outline);
         setOutline(data.mapped_outline);
-        setMappingStatus(`Đã mapping thành công ${data.mapped_count} file PDF vào outline`);
-        setSnackbar({open: true, message: "Mapping PDF files thành công!", severity: 'success'});
+        
+        const returnedUnmatched: string[] = data.unmatched_files || [];
+        setUnmatchedFiles(prev => Array.from(new Set([...prev, ...returnedUnmatched])));
+
+        const newMapped = filesToMap
+          .map(f => f.name.toLowerCase())
+          .filter(name => !returnedUnmatched.some(u => u.toLowerCase() === name));
+
+        setMappedFileNames(prev => Array.from(new Set([...prev, ...newMapped])));
+
+        const countMsg = incrementalMode
+          ? `Đã mapping ${data.mapped_count} file mới vào outline`
+          : `Đã mapping thành công ${data.mapped_count} file PDF vào outline`;
+        
+        const unmatchedMsg = returnedUnmatched.length > 0
+          ? `. Có ${returnedUnmatched.length} file chưa được gán.`
+          : "";
+
+        setMappingStatus(countMsg + unmatchedMsg);
+        setSnackbar({
+          open: true, 
+          message: countMsg + unmatchedMsg, 
+          severity: returnedUnmatched.length > 0 ? 'info' : 'success'
+        });
       } else {
         setMappingStatus("Lỗi khi mapping PDF files");
         setSnackbar({open: true, message: "Mapping thất bại: " + data.message, severity: 'error'});
@@ -323,6 +372,8 @@ export default function CourseGeneratorTool() {
     setPackagingLog("");
     setExportFilename("course_export");
     setPdfFiles([]);
+    setMappedFileNames([]);
+    setUnmatchedFiles([]);
     setMappingStatus("");
     setPastedText("");
     setCustomPrompt("");
@@ -611,18 +662,42 @@ export default function CourseGeneratorTool() {
               {pdfFiles.length > 0 && (
                 <Paper sx={{ p: 2, mb: 3 }}>
                   <Typography variant="h6" mb={2}>3. Tự động mapping PDF slides</Typography>
-                  <Button 
-                    onClick={handleAutoMapPdfs} 
-                    variant="contained" 
-                    disabled={loading}
-                    startIcon={<UploadIcon />}
-                  >
-                    Tự động mapping PDF vào outline
-                  </Button>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+                    <Button 
+                      onClick={() => handleAutoMapPdfs(mappedFileNames.length > 0)} 
+                      variant="contained" 
+                      disabled={loading}
+                      startIcon={<UploadIcon />}
+                    >
+                      {mappedFileNames.length === 0 ? "Tự động mapping PDF vào outline" : "Khớp tự động file mới vào outline"}
+                    </Button>
+                    {mappedFileNames.length > 0 && (
+                      <Button
+                        onClick={() => handleAutoMapPdfs(false)}
+                        variant="outlined"
+                        size="small"
+                        disabled={loading}
+                      >
+                        Khớp lại toàn bộ file
+                      </Button>
+                    )}
+                  </Box>
                   {mappingStatus && (
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                       {mappingStatus}
                     </Typography>
+                  )}
+                  {unmatchedFiles.length > 0 && (
+                    <Alert severity="info" sx={{ mt: 2 }}>
+                      <Typography variant="caption" fontWeight={600} display="block" mb={0.5}>
+                        Các file chưa gán vào outline (bạn có thể gán thủ công trên cây bài học bên dưới):
+                      </Typography>
+                      {unmatchedFiles.map((fn, idx) => (
+                        <Typography key={idx} variant="caption" display="block">
+                          • {fn}
+                        </Typography>
+                      ))}
+                    </Alert>
                   )}
                 </Paper>
               )}

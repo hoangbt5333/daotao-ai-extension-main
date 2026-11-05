@@ -3,7 +3,7 @@ Mapping endpoints
 """
 import json
 import re
-from typing import List
+from typing import List, Tuple
 from fastapi import APIRouter, Form, File, UploadFile
 from app.models.schemas.responses import MappingResponse
 
@@ -13,7 +13,8 @@ router = APIRouter()
 @router.post("/pdfs")
 async def map_pdfs_to_outline(
     files: List[UploadFile] = File(...),
-    outline: str = Form(...)
+    outline: str = Form(...),
+    incremental: bool = Form(False)
 ):
     """Map PDF files to outline based on filename analysis"""
     try:
@@ -21,12 +22,16 @@ async def map_pdfs_to_outline(
         outline_data = json.loads(outline)
         
         # Analyze filenames and map to outline
-        mapped_outline = await map_pdf_files_to_outline(files, outline_data)
+        mapped_outline, unmatched_files = await map_pdf_files_to_outline(
+            files, outline_data, incremental=incremental
+        )
         
+        mapped_count = len(files) - len(unmatched_files) if incremental else len(files)
         return MappingResponse(
             success=True,
             mapped_outline=mapped_outline,
-            mapped_count=len(files),
+            mapped_count=mapped_count,
+            unmatched_files=unmatched_files,
             message="PDF mapping completed successfully"
         )
     except Exception as e:
@@ -34,14 +39,135 @@ async def map_pdfs_to_outline(
             success=False,
             mapped_outline={},
             mapped_count=0,
+            unmatched_files=[],
             message=f"PDF mapping failed: {str(e)}"
         )
 
 
-async def map_pdf_files_to_outline(files: List[UploadFile], outline_data: dict) -> dict:
+def is_unit_eligible_for_incremental(unit: dict) -> bool:
+    """
+    Check if a unit is eligible to receive a file in incremental mode:
+    1. Unit must NOT already have a file (file, pdf_file, audio_file, quiz_file).
+    2. Unit must NOT have protected type (video_quiz, audio, embed, iframe).
+    """
+    has_file = bool(
+        (unit.get('file') and str(unit.get('file')).strip()) or
+        (unit.get('pdf_file') and str(unit.get('pdf_file')).strip()) or
+        (unit.get('audio_file') and str(unit.get('audio_file')).strip()) or
+        (unit.get('quiz_file') and str(unit.get('quiz_file')).strip())
+    )
+    if has_file:
+        return False
+        
+    unit_type = str(unit.get('type') or '').lower().strip()
+    if unit_type in ('video_quiz', 'audio', 'embed', 'iframe'):
+        return False
+        
+    return True
+
+
+def map_pdf_files_incrementally(files: List[UploadFile], mapped_outline: dict) -> List[str]:
+    """
+    Incremental mapping for newly added files:
+    - Only map to units that DO NOT have a file.
+    - Never change type of units that already have a file or have protected types.
+    - Never create new units.
+    - Never use add_file_to_first_available_unit.
+    - Return list of unmatched filenames.
+    """
+    unmatched_files: List[str] = []
+    
+    def _norm(s: str) -> str:
+        s = s.replace('.pdf', '').replace('.PDF', '')
+        s = s.replace('-', ' ').replace(':', ' ').replace('_', ' ')
+        s = re.sub(r'[^\w\s]', '', s.lower())
+        return ' '.join(s.split())
+
+    for file in files:
+        filename = file.filename
+        if not filename:
+            continue
+        if not filename.lower().endswith('.pdf'):
+            unmatched_files.append(filename)
+            continue
+            
+        norm_filename = _norm(filename)
+        target_unit = None
+        
+        # Pass 1: Check exact or normalized title match with eligible units
+        for chapter in mapped_outline.get('outline', []):
+            for subsection in chapter.get('subsections', []):
+                for unit in subsection.get('units', []):
+                    if is_unit_eligible_for_incremental(unit):
+                        norm_title = _norm(unit.get('title', ''))
+                        if norm_title and (norm_title == norm_filename):
+                            target_unit = unit
+                            break
+                if target_unit:
+                    break
+            if target_unit:
+                break
+                
+        # Pass 2: Smart title matching with eligible units (similarity score > 0.7)
+        if not target_unit:
+            best_score = 0.0
+            best_candidate = None
+            for chapter in mapped_outline.get('outline', []):
+                for subsection in chapter.get('subsections', []):
+                    for unit in subsection.get('units', []):
+                        if is_unit_eligible_for_incremental(unit):
+                            norm_title = _norm(unit.get('title', ''))
+                            if norm_title:
+                                score = calculate_similarity_score(norm_filename, norm_title)
+                                if score > 0.7 and score > best_score:
+                                    best_score = score
+                                    best_candidate = unit
+            if best_candidate:
+                target_unit = best_candidate
+                
+        # Pass 3: Pattern matching to find eligible unit in matching chapter/subsection
+        if not target_unit:
+            pattern_info = analyze_filename_pattern(filename, mapped_outline)
+            if pattern_info and pattern_info.get('confidence', 0) > 0.3:
+                c_idx = pattern_info.get('chapter_index', 0)
+                s_idx = pattern_info.get('subsection_index', 0)
+                chapters = mapped_outline.get('outline', [])
+                if c_idx < len(chapters):
+                    subsections = chapters[c_idx].get('subsections', [])
+                    if s_idx < len(subsections):
+                        p_norm_title = _norm(pattern_info.get('unit_title', ''))
+                        for unit in subsections[s_idx].get('units', []):
+                            if is_unit_eligible_for_incremental(unit):
+                                u_norm = _norm(unit.get('title', ''))
+                                if u_norm and (u_norm == p_norm_title or p_norm_title in u_norm or u_norm in p_norm_title):
+                                    target_unit = unit
+                                    break
+                                    
+        if target_unit:
+            if target_unit.get('video_url') or target_unit.get('type') == 'video':
+                target_unit['pdf_file'] = filename
+                target_unit['type'] = 'video_pdf'
+            else:
+                target_unit['file'] = filename
+                target_unit['type'] = 'pdf'
+        else:
+            unmatched_files.append(filename)
+            
+    return unmatched_files
+
+
+async def map_pdf_files_to_outline(
+    files: List[UploadFile], 
+    outline_data: dict,
+    incremental: bool = False
+) -> Tuple[dict, List[str]]:
     """Map PDF files to outline using filename analysis"""
     # Create a copy of outline to modify
     mapped_outline = json.loads(json.dumps(outline_data))
+    
+    if incremental:
+        unmatched_files = map_pdf_files_incrementally(files, mapped_outline)
+        return mapped_outline, unmatched_files
     
     print(f"Starting PDF mapping for {len(files)} files")
     print(f"Original outline structure: {len(mapped_outline.get('outline', []))} chapters")
@@ -91,7 +217,7 @@ async def map_pdf_files_to_outline(files: List[UploadFile], outline_data: dict) 
         for j, subsection in enumerate(chapter.get('subsections', [])):
             print(f"  Subsection {j}: {subsection.get('title', 'Untitled')} - {len(subsection.get('units', []))} units")
     
-    return mapped_outline
+    return mapped_outline, []
 
 
 def map_pdf_by_exact_filename(outline: dict, filename: str) -> bool:
