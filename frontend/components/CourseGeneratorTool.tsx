@@ -35,7 +35,7 @@ import AudioFileIcon from '@mui/icons-material/AudioFile';
 import DescriptionIcon from '@mui/icons-material/Description';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import { getApiUrl, API_ENDPOINTS } from "../config/api";
-import { mergeFiles, formatFileSize } from "../utils/fileHelpers";
+import { mergeFiles, formatFileSize, getUnitsWithMissingFiles } from "../utils/fileHelpers";
 
 const steps = [
   "Nhập outline",
@@ -101,6 +101,29 @@ export default function CourseGeneratorTool() {
       message: "Đã xóa tất cả file",
       severity: 'info'
     });
+  };
+
+  const missingFileUnits = getUnitsWithMissingFiles(outline, pdfFiles);
+
+  const renderMissingFilesAlert = () => {
+    if (missingFileUnits.length === 0) return null;
+    return (
+      <Alert severity="warning" sx={{ mb: 2 }}>
+        <Typography variant="subtitle2" fontWeight={600} mb={0.5}>
+          Cảnh báo: Có {missingFileUnits.length} unit đang tham chiếu file chưa có trong danh sách tải lên
+        </Typography>
+        <Typography variant="body2" sx={{ mb: 1 }}>
+          Các file này chưa có trong danh sách file đính kèm. Bạn vẫn có thể tiếp tục xuất bài giảng, nhưng các tài nguyên bị thiếu sẽ không được đóng gói:
+        </Typography>
+        <Box sx={{ maxHeight: 120, overflowY: 'auto', pl: 1 }}>
+          {missingFileUnits.map((u, idx) => (
+            <Typography key={idx} variant="caption" display="block">
+              • <b>{u.unitTitle}</b> ({u.chapterTitle} / {u.subsectionTitle}) — thiếu file: <code>{u.expectedFileName}</code>
+            </Typography>
+          ))}
+        </Box>
+      </Alert>
+    );
   };
 
   const BACKEND = "http://localhost:8000";
@@ -606,6 +629,8 @@ export default function CourseGeneratorTool() {
             </>
           )}
 
+          {renderMissingFilesAlert()}
+
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
             <Button onClick={handleNext} variant="contained" disabled={!outline || outline.outline.length === 0}>Tiếp tục</Button>
           </Box>
@@ -616,6 +641,7 @@ export default function CourseGeneratorTool() {
         <>
           <Paper sx={{ p: 2, mb: 3 }}>
             <Typography variant="subtitle1" fontWeight={600} mb={2}>Chuyển đổi sang định dạng Open edX</Typography>
+            {renderMissingFilesAlert()}
             <TextField
               label="Tên file xuất ra (.tar.gz)"
               value={exportFilename}
