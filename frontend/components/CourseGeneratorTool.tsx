@@ -1,5 +1,24 @@
 import React, { useState } from "react";
-import { Box, Button, Typography, TextField, CircularProgress, Paper, Stepper, Step, StepLabel, Snackbar, Alert } from "@mui/material";
+import { 
+  Box, 
+  Button, 
+  Typography, 
+  TextField, 
+  CircularProgress, 
+  Paper, 
+  Stepper, 
+  Step, 
+  StepLabel, 
+  Snackbar, 
+  Alert,
+  IconButton,
+  Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions
+} from "@mui/material";
 import Table from "@mui/material/Table";
 import TableHead from "@mui/material/TableHead";
 import TableBody from "@mui/material/TableBody";
@@ -9,8 +28,14 @@ import EditableOutlineTree, { OutlineData } from "./EditableOutlineTree";
 import FolderIcon from '@mui/icons-material/Folder';
 import UploadIcon from '@mui/icons-material/Upload';
 import DownloadIcon from '@mui/icons-material/Download';
+import DeleteIcon from '@mui/icons-material/Delete';
+import AddIcon from '@mui/icons-material/Add';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import AudioFileIcon from '@mui/icons-material/AudioFile';
+import DescriptionIcon from '@mui/icons-material/Description';
+import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import { getApiUrl, API_ENDPOINTS } from "../config/api";
-import { mergeFiles } from "../utils/fileHelpers";
+import { mergeFiles, formatFileSize } from "../utils/fileHelpers";
 
 const steps = [
   "Nhập outline",
@@ -28,7 +53,7 @@ export default function CourseGeneratorTool() {
   const [conversionLog, setConversionLog] = useState<string>("");
   const [packagingLog, setPackagingLog] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const [snackbar, setSnackbar] = useState<{open: boolean, message: string, severity: 'success'|'error'}>({open: false, message: '', severity: 'success'});
+  const [snackbar, setSnackbar] = useState<{open: boolean, message: string, severity: 'success'|'error'|'info'|'warning'}>({open: false, message: '', severity: 'success'});
   const [exportFilename, setExportFilename] = useState<string>("course_export");
   const [pdfFiles, setPdfFiles] = useState<File[]>([]);
   const [mappingStatus, setMappingStatus] = useState<string>("");
@@ -38,6 +63,45 @@ export default function CourseGeneratorTool() {
   const [excelRows, setExcelRows] = useState<any[]>([]);
   const [excelWarnings, setExcelWarnings] = useState<string[]>([]);
   const [excelOutlinePreview, setExcelOutlinePreview] = useState<OutlineData | null>(null);
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
+
+  const getFileIcon = (fileName: string) => {
+    const lower = fileName.toLowerCase();
+    if (lower.endsWith('.pdf')) {
+      return <PictureAsPdfIcon sx={{ color: '#d32f2f' }} fontSize="small" />;
+    }
+    if (lower.endsWith('.mp3') || lower.endsWith('.wav') || lower.endsWith('.ogg')) {
+      return <AudioFileIcon sx={{ color: '#ed6c02' }} fontSize="small" />;
+    }
+    if (lower.endsWith('.txt')) {
+      return <DescriptionIcon sx={{ color: '#0288d1' }} fontSize="small" />;
+    }
+    return <InsertDriveFileIcon sx={{ color: 'text.secondary' }} fontSize="small" />;
+  };
+
+  const handleDeleteFile = (fileNameToRemove: string) => {
+    setPdfFiles(prev => {
+      const updated = prev.filter(f => f.name.toLowerCase() !== fileNameToRemove.toLowerCase());
+      setMappingStatus(updated.length > 0 ? `Đã chọn ${updated.length} file (PDF/Audio/Quiz .txt)` : "");
+      return updated;
+    });
+    setSnackbar({
+      open: true,
+      message: `Đã xóa file ${fileNameToRemove}`,
+      severity: 'info'
+    });
+  };
+
+  const handleConfirmClearAll = () => {
+    setPdfFiles([]);
+    setMappingStatus("");
+    setConfirmClearAll(false);
+    setSnackbar({
+      open: true,
+      message: "Đã xóa tất cả file",
+      severity: 'info'
+    });
+  };
 
   const BACKEND = "http://localhost:8000";
 
@@ -391,30 +455,126 @@ export default function CourseGeneratorTool() {
               style={{ display: 'none' }}
               id="pdf-folder-upload"
             />
-            <label htmlFor="pdf-folder-upload">
-              <Button
-                variant="outlined"
-                component="span"
-                startIcon={<FolderIcon />}
-                sx={{ mr: 2 }}
-              >
-                Chọn files PDF / Audio / Quiz .txt
-              </Button>
-            </label>
-            {pdfFiles.length > 0 && (
+            {pdfFiles.length === 0 ? (
+              <label htmlFor="pdf-folder-upload">
+                <Button
+                  variant="outlined"
+                  component="span"
+                  startIcon={<FolderIcon />}
+                  sx={{ mr: 2 }}
+                >
+                  Chọn files PDF / Audio / Quiz .txt
+                </Button>
+              </label>
+            ) : (
               <Box sx={{ mt: 2 }}>
-                <Typography variant="body2" color="primary">
-                  {mappingStatus || `Đã chọn ${pdfFiles.length} file (PDF/Audio/Quiz .txt)`}
-                </Typography>
-                <Box sx={{ mt: 1, maxHeight: 200, overflow: 'auto' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                  <Typography variant="subtitle2" color="primary" fontWeight={600}>
+                    {mappingStatus || `Đã chọn ${pdfFiles.length} file (PDF/Audio/Quiz .txt)`}
+                  </Typography>
+                  <Button
+                    variant="text"
+                    color="error"
+                    size="small"
+                    startIcon={<DeleteIcon />}
+                    onClick={() => setConfirmClearAll(true)}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    Xóa tất cả
+                  </Button>
+                </Box>
+
+                <Box sx={{ maxHeight: 260, overflowY: 'auto', pr: 0.5, mb: 2 }}>
                   {pdfFiles.map((file, index) => (
-                    <Typography key={index} variant="caption" display="block">
-                      • {file.name}
-                    </Typography>
+                    <Box
+                      key={`${file.name}-${index}`}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        p: 1,
+                        px: 1.5,
+                        mb: 1,
+                        border: '1px solid #e0e0e0',
+                        borderRadius: 1,
+                        bgcolor: 'background.paper',
+                        '&:hover': {
+                          bgcolor: 'action.hover'
+                        }
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0, mr: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mr: 1.5, flexShrink: 0 }}>
+                          {getFileIcon(file.name)}
+                        </Box>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontWeight: 500,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}
+                          title={file.name}
+                        >
+                          {file.name}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ ml: 1.5, flexShrink: 0 }}
+                        >
+                          {formatFileSize(file.size)}
+                        </Typography>
+                      </Box>
+                      <Tooltip title={`Xóa ${file.name}`}>
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => handleDeleteFile(file.name)}
+                          aria-label={`Xóa file ${file.name}`}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
                   ))}
+                </Box>
+
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <label htmlFor="pdf-folder-upload">
+                    <Button
+                      variant="outlined"
+                      component="span"
+                      startIcon={<AddIcon />}
+                      size="small"
+                      sx={{ textTransform: 'none' }}
+                    >
+                      + Thêm file
+                    </Button>
+                  </label>
                 </Box>
               </Box>
             )}
+
+            <Dialog
+              open={confirmClearAll}
+              onClose={() => setConfirmClearAll(false)}
+            >
+              <DialogTitle>Xác nhận xóa tất cả file</DialogTitle>
+              <DialogContent>
+                <DialogContentText>
+                  Bạn có chắc chắn muốn xóa toàn bộ {pdfFiles.length} file đã chọn?
+                  Cây outline hiện tại sẽ không bị thay đổi, nhưng các unit có thể bị thiếu tài nguyên khi xuất bài giảng.
+                </DialogContentText>
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={() => setConfirmClearAll(false)}>Hủy</Button>
+                <Button onClick={handleConfirmClearAll} color="error" variant="contained">
+                  Xóa tất cả
+                </Button>
+              </DialogActions>
+            </Dialog>
           </Paper>
 
           {loading && <CircularProgress sx={{ mb: 2 }} />}
