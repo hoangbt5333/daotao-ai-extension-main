@@ -70,6 +70,7 @@ class MappingResponse(BaseResponse):
     success: bool = Field(default=True, description="Operation success status")
     mapped_outline: Dict[str, Any] = Field(..., description="Mapped outline")
     mapped_count: int = Field(..., description="Number of files mapped")
+    unmatched_files: List[str] = Field(default_factory=list, description="Files not matched to any unit")
 
 
 class QuestionFilterResponse(BaseResponse):

@@ -1,5 +1,24 @@
 import React, { useState } from "react";
-import { Box, Button, Typography, TextField, CircularProgress, Paper, Stepper, Step, StepLabel, Snackbar, Alert } from "@mui/material";
+import { 
+  Box, 
+  Button, 
+  Typography, 
+  TextField, 
+  CircularProgress, 
+  Paper, 
+  Stepper, 
+  Step, 
+  StepLabel, 
+  Snackbar, 
+  Alert,
+  IconButton,
+  Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions
+} from "@mui/material";
 import Table from "@mui/material/Table";
 import TableHead from "@mui/material/TableHead";
 import TableBody from "@mui/material/TableBody";
@@ -9,7 +28,14 @@ import EditableOutlineTree, { OutlineData } from "./EditableOutlineTree";
 import FolderIcon from '@mui/icons-material/Folder';
 import UploadIcon from '@mui/icons-material/Upload';
 import DownloadIcon from '@mui/icons-material/Download';
+import DeleteIcon from '@mui/icons-material/Delete';
+import AddIcon from '@mui/icons-material/Add';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import AudioFileIcon from '@mui/icons-material/AudioFile';
+import DescriptionIcon from '@mui/icons-material/Description';
+import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import { getApiUrl, API_ENDPOINTS } from "../config/api";
+import { mergeFiles, formatFileSize, getUnitsWithMissingFiles } from "../utils/fileHelpers";
 
 const steps = [
   "Nhập outline",
@@ -27,7 +53,7 @@ export default function CourseGeneratorTool() {
   const [conversionLog, setConversionLog] = useState<string>("");
   const [packagingLog, setPackagingLog] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const [snackbar, setSnackbar] = useState<{open: boolean, message: string, severity: 'success'|'error'}>({open: false, message: '', severity: 'success'});
+  const [snackbar, setSnackbar] = useState<{open: boolean, message: string, severity: 'success'|'error'|'info'|'warning'}>({open: false, message: '', severity: 'success'});
   const [exportFilename, setExportFilename] = useState<string>("course_export");
   const [pdfFiles, setPdfFiles] = useState<File[]>([]);
   const [mappingStatus, setMappingStatus] = useState<string>("");
@@ -37,6 +63,72 @@ export default function CourseGeneratorTool() {
   const [excelRows, setExcelRows] = useState<any[]>([]);
   const [excelWarnings, setExcelWarnings] = useState<string[]>([]);
   const [excelOutlinePreview, setExcelOutlinePreview] = useState<OutlineData | null>(null);
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
+  const [mappedFileNames, setMappedFileNames] = useState<string[]>([]);
+  const [unmatchedFiles, setUnmatchedFiles] = useState<string[]>([]);
+
+  const getFileIcon = (fileName: string) => {
+    const lower = fileName.toLowerCase();
+    if (lower.endsWith('.pdf')) {
+      return <PictureAsPdfIcon sx={{ color: '#d32f2f' }} fontSize="small" />;
+    }
+    if (lower.endsWith('.mp3') || lower.endsWith('.wav') || lower.endsWith('.ogg')) {
+      return <AudioFileIcon sx={{ color: '#ed6c02' }} fontSize="small" />;
+    }
+    if (lower.endsWith('.txt')) {
+      return <DescriptionIcon sx={{ color: '#0288d1' }} fontSize="small" />;
+    }
+    return <InsertDriveFileIcon sx={{ color: 'text.secondary' }} fontSize="small" />;
+  };
+
+  const handleDeleteFile = (fileNameToRemove: string) => {
+    setPdfFiles(prev => {
+      const updated = prev.filter(f => f.name.toLowerCase() !== fileNameToRemove.toLowerCase());
+      setMappingStatus(updated.length > 0 ? `Đã chọn ${updated.length} file (PDF/Audio/Quiz .txt)` : "");
+      return updated;
+    });
+    setSnackbar({
+      open: true,
+      message: `Đã xóa file ${fileNameToRemove}`,
+      severity: 'info'
+    });
+  };
+
+  const handleConfirmClearAll = () => {
+    setPdfFiles([]);
+    setMappingStatus("");
+    setMappedFileNames([]);
+    setUnmatchedFiles([]);
+    setConfirmClearAll(false);
+    setSnackbar({
+      open: true,
+      message: "Đã xóa tất cả file",
+      severity: 'info'
+    });
+  };
+
+  const missingFileUnits = getUnitsWithMissingFiles(outline, pdfFiles);
+
+  const renderMissingFilesAlert = () => {
+    if (missingFileUnits.length === 0) return null;
+    return (
+      <Alert severity="warning" sx={{ mb: 2 }}>
+        <Typography variant="subtitle2" fontWeight={600} mb={0.5}>
+          Cảnh báo: Có {missingFileUnits.length} unit đang tham chiếu file chưa có trong danh sách tải lên
+        </Typography>
+        <Typography variant="body2" sx={{ mb: 1 }}>
+          Các file này chưa có trong danh sách file đính kèm. Bạn vẫn có thể tiếp tục xuất bài giảng, nhưng các tài nguyên bị thiếu sẽ không được đóng gói:
+        </Typography>
+        <Box sx={{ maxHeight: 120, overflowY: 'auto', pl: 1 }}>
+          {missingFileUnits.map((u, idx) => (
+            <Typography key={idx} variant="caption" display="block">
+              • <b>{u.unitTitle}</b> ({u.chapterTitle} / {u.subsectionTitle}) — thiếu file: <code>{u.expectedFileName}</code>
+            </Typography>
+          ))}
+        </Box>
+      </Alert>
+    );
+  };
 
   const BACKEND = "http://localhost:8000";
 
@@ -96,6 +188,8 @@ export default function CourseGeneratorTool() {
   // Handle folder upload for PDF, Audio, and Quiz text files
   const handleFolderUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
     const assetFiles = files.filter(file => {
       const name = file.name.toLowerCase();
       return (
@@ -107,28 +201,74 @@ export default function CourseGeneratorTool() {
         file.type === 'text/plain'
       );
     });
-    setPdfFiles(assetFiles);
-    setMappingStatus(`Đã chọn ${assetFiles.length} file (PDF/Audio/Quiz .txt)`);
+
+    if (assetFiles.length === 0) {
+      setSnackbar({
+        open: true,
+        message: "Không tìm thấy file hợp lệ (.pdf, .mp3, .txt)",
+        severity: 'error'
+      });
+      event.target.value = '';
+      return;
+    }
+
+    const { merged, replacedNames } = mergeFiles(pdfFiles, assetFiles);
+    setPdfFiles(merged);
+    setMappingStatus(`Đã chọn ${merged.length} file (PDF/Audio/Quiz .txt)`);
+
+    if (replacedNames.length > 0) {
+      setSnackbar({
+        open: true,
+        message: `Đã thay file ${replacedNames.join(', ')}`,
+        severity: 'info'
+      });
+    }
+
+    // Khi thêm file, chỉ khớp tự động các file MỚI (nếu đã có outline và đã từng mapping hoặc có file mới)
+    if (outline && outline.outline.length > 0 && mappedFileNames.length > 0) {
+      const newlyAddedFiles = assetFiles.filter(f => !mappedFileNames.includes(f.name.toLowerCase()));
+      if (newlyAddedFiles.length > 0) {
+        handleAutoMapPdfs(true, newlyAddedFiles);
+      }
+    }
+
+    // Đặt lại input.value sau mỗi lần chọn để có thể chọn lại cùng file
+    event.target.value = '';
   };
 
   // Auto-map PDF files to outline
-  const handleAutoMapPdfs = async () => {
-    if (pdfFiles.length === 0 || outline.outline.length === 0) {
-      setSnackbar({open: true, message: "Vui lòng upload PDF files và tạo outline trước!", severity: 'error'});
+  const handleAutoMapPdfs = async (incrementalMode: boolean = false, overrideFiles?: File[]) => {
+    const filesToMap = overrideFiles || (incrementalMode 
+      ? pdfFiles.filter(f => !mappedFileNames.includes(f.name.toLowerCase()))
+      : pdfFiles);
+
+    if (filesToMap.length === 0 || outline.outline.length === 0) {
+      setSnackbar({
+        open: true, 
+        message: outline.outline.length === 0 
+          ? "Vui lòng import outline trước!" 
+          : "Không có file mới nào cần mapping!", 
+        severity: 'info'
+      });
       return;
     }
 
     setLoading(true);
-    setMappingStatus("Đang phân tích và mapping PDF files...");
+    setMappingStatus(incrementalMode 
+      ? `Đang phân tích và mapping ${filesToMap.length} file mới...` 
+      : "Đang phân tích và mapping PDF files...");
 
     try {
       const formData = new FormData();
-      pdfFiles.forEach((file, index) => {
+      filesToMap.forEach((file) => {
         formData.append(`files`, file);
       });
       formData.append("outline", JSON.stringify(outline));
+      if (incrementalMode) {
+        formData.append("incremental", "true");
+      }
 
-      console.log("Sending outline to backend:", outline);
+      console.log("Sending outline to backend, incremental:", incrementalMode, outline);
 
       const res = await fetch(getApiUrl(API_ENDPOINTS.MAPPING_PDFS), {
         method: "POST",
@@ -142,8 +282,30 @@ export default function CourseGeneratorTool() {
       if (data.success) {
         console.log("Mapped outline received:", data.mapped_outline);
         setOutline(data.mapped_outline);
-        setMappingStatus(`Đã mapping thành công ${data.mapped_count} file PDF vào outline`);
-        setSnackbar({open: true, message: "Mapping PDF files thành công!", severity: 'success'});
+        
+        const returnedUnmatched: string[] = data.unmatched_files || [];
+        setUnmatchedFiles(prev => Array.from(new Set([...prev, ...returnedUnmatched])));
+
+        const newMapped = filesToMap
+          .map(f => f.name.toLowerCase())
+          .filter(name => !returnedUnmatched.some(u => u.toLowerCase() === name));
+
+        setMappedFileNames(prev => Array.from(new Set([...prev, ...newMapped])));
+
+        const countMsg = incrementalMode
+          ? `Đã mapping ${data.mapped_count} file mới vào outline`
+          : `Đã mapping thành công ${data.mapped_count} file PDF vào outline`;
+        
+        const unmatchedMsg = returnedUnmatched.length > 0
+          ? `. Có ${returnedUnmatched.length} file chưa được gán.`
+          : "";
+
+        setMappingStatus(countMsg + unmatchedMsg);
+        setSnackbar({
+          open: true, 
+          message: countMsg + unmatchedMsg, 
+          severity: returnedUnmatched.length > 0 ? 'info' : 'success'
+        });
       } else {
         setMappingStatus("Lỗi khi mapping PDF files");
         setSnackbar({open: true, message: "Mapping thất bại: " + data.message, severity: 'error'});
@@ -210,6 +372,8 @@ export default function CourseGeneratorTool() {
     setPackagingLog("");
     setExportFilename("course_export");
     setPdfFiles([]);
+    setMappedFileNames([]);
+    setUnmatchedFiles([]);
     setMappingStatus("");
     setPastedText("");
     setCustomPrompt("");
@@ -365,30 +529,126 @@ export default function CourseGeneratorTool() {
               style={{ display: 'none' }}
               id="pdf-folder-upload"
             />
-            <label htmlFor="pdf-folder-upload">
-              <Button
-                variant="outlined"
-                component="span"
-                startIcon={<FolderIcon />}
-                sx={{ mr: 2 }}
-              >
-                Chọn files PDF / Audio / Quiz .txt
-              </Button>
-            </label>
-            {pdfFiles.length > 0 && (
+            {pdfFiles.length === 0 ? (
+              <label htmlFor="pdf-folder-upload">
+                <Button
+                  variant="outlined"
+                  component="span"
+                  startIcon={<FolderIcon />}
+                  sx={{ mr: 2 }}
+                >
+                  Chọn files PDF / Audio / Quiz .txt
+                </Button>
+              </label>
+            ) : (
               <Box sx={{ mt: 2 }}>
-                <Typography variant="body2" color="primary">
-                  {mappingStatus || `Đã chọn ${pdfFiles.length} file (PDF/Audio/Quiz .txt)`}
-                </Typography>
-                <Box sx={{ mt: 1, maxHeight: 200, overflow: 'auto' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                  <Typography variant="subtitle2" color="primary" fontWeight={600}>
+                    {mappingStatus || `Đã chọn ${pdfFiles.length} file (PDF/Audio/Quiz .txt)`}
+                  </Typography>
+                  <Button
+                    variant="text"
+                    color="error"
+                    size="small"
+                    startIcon={<DeleteIcon />}
+                    onClick={() => setConfirmClearAll(true)}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    Xóa tất cả
+                  </Button>
+                </Box>
+
+                <Box sx={{ maxHeight: 260, overflowY: 'auto', pr: 0.5, mb: 2 }}>
                   {pdfFiles.map((file, index) => (
-                    <Typography key={index} variant="caption" display="block">
-                      • {file.name}
-                    </Typography>
+                    <Box
+                      key={`${file.name}-${index}`}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        p: 1,
+                        px: 1.5,
+                        mb: 1,
+                        border: '1px solid #e0e0e0',
+                        borderRadius: 1,
+                        bgcolor: 'background.paper',
+                        '&:hover': {
+                          bgcolor: 'action.hover'
+                        }
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0, mr: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mr: 1.5, flexShrink: 0 }}>
+                          {getFileIcon(file.name)}
+                        </Box>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontWeight: 500,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}
+                          title={file.name}
+                        >
+                          {file.name}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ ml: 1.5, flexShrink: 0 }}
+                        >
+                          {formatFileSize(file.size)}
+                        </Typography>
+                      </Box>
+                      <Tooltip title={`Xóa ${file.name}`}>
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => handleDeleteFile(file.name)}
+                          aria-label={`Xóa file ${file.name}`}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
                   ))}
+                </Box>
+
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <label htmlFor="pdf-folder-upload">
+                    <Button
+                      variant="outlined"
+                      component="span"
+                      startIcon={<AddIcon />}
+                      size="small"
+                      sx={{ textTransform: 'none' }}
+                    >
+                      + Thêm file
+                    </Button>
+                  </label>
                 </Box>
               </Box>
             )}
+
+            <Dialog
+              open={confirmClearAll}
+              onClose={() => setConfirmClearAll(false)}
+            >
+              <DialogTitle>Xác nhận xóa tất cả file</DialogTitle>
+              <DialogContent>
+                <DialogContentText>
+                  Bạn có chắc chắn muốn xóa toàn bộ {pdfFiles.length} file đã chọn?
+                  Cây outline hiện tại sẽ không bị thay đổi, nhưng các unit có thể bị thiếu tài nguyên khi xuất bài giảng.
+                </DialogContentText>
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={() => setConfirmClearAll(false)}>Hủy</Button>
+                <Button onClick={handleConfirmClearAll} color="error" variant="contained">
+                  Xóa tất cả
+                </Button>
+              </DialogActions>
+            </Dialog>
           </Paper>
 
           {loading && <CircularProgress sx={{ mb: 2 }} />}
@@ -402,23 +662,49 @@ export default function CourseGeneratorTool() {
               {pdfFiles.length > 0 && (
                 <Paper sx={{ p: 2, mb: 3 }}>
                   <Typography variant="h6" mb={2}>3. Tự động mapping PDF slides</Typography>
-                  <Button 
-                    onClick={handleAutoMapPdfs} 
-                    variant="contained" 
-                    disabled={loading}
-                    startIcon={<UploadIcon />}
-                  >
-                    Tự động mapping PDF vào outline
-                  </Button>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+                    <Button 
+                      onClick={() => handleAutoMapPdfs(mappedFileNames.length > 0)} 
+                      variant="contained" 
+                      disabled={loading}
+                      startIcon={<UploadIcon />}
+                    >
+                      {mappedFileNames.length === 0 ? "Tự động mapping PDF vào outline" : "Khớp tự động file mới vào outline"}
+                    </Button>
+                    {mappedFileNames.length > 0 && (
+                      <Button
+                        onClick={() => handleAutoMapPdfs(false)}
+                        variant="outlined"
+                        size="small"
+                        disabled={loading}
+                      >
+                        Khớp lại toàn bộ file
+                      </Button>
+                    )}
+                  </Box>
                   {mappingStatus && (
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                       {mappingStatus}
                     </Typography>
                   )}
+                  {unmatchedFiles.length > 0 && (
+                    <Alert severity="info" sx={{ mt: 2 }}>
+                      <Typography variant="caption" fontWeight={600} display="block" mb={0.5}>
+                        Các file chưa gán vào outline (bạn có thể gán thủ công trên cây bài học bên dưới):
+                      </Typography>
+                      {unmatchedFiles.map((fn, idx) => (
+                        <Typography key={idx} variant="caption" display="block">
+                          • {fn}
+                        </Typography>
+                      ))}
+                    </Alert>
+                  )}
                 </Paper>
               )}
             </>
           )}
+
+          {renderMissingFilesAlert()}
 
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
             <Button onClick={handleNext} variant="contained" disabled={!outline || outline.outline.length === 0}>Tiếp tục</Button>
@@ -430,6 +716,7 @@ export default function CourseGeneratorTool() {
         <>
           <Paper sx={{ p: 2, mb: 3 }}>
             <Typography variant="subtitle1" fontWeight={600} mb={2}>Chuyển đổi sang định dạng Open edX</Typography>
+            {renderMissingFilesAlert()}
             <TextField
               label="Tên file xuất ra (.tar.gz)"
               value={exportFilename}
