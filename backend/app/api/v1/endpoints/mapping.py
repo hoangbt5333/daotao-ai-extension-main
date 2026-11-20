@@ -48,7 +48,7 @@ def is_unit_eligible_for_incremental(unit: dict) -> bool:
     """
     Check if a unit is eligible to receive a file in incremental mode:
     1. Unit must NOT already have a file (file, pdf_file, audio_file, quiz_file).
-    2. Unit must NOT have protected type (video_quiz, audio, embed, iframe).
+    2. Unit must NOT have protected type (video_quiz, audio, embed, iframe, link).
     """
     has_file = bool(
         (unit.get('file') and str(unit.get('file')).strip()) or
@@ -60,7 +60,7 @@ def is_unit_eligible_for_incremental(unit: dict) -> bool:
         return False
         
     unit_type = str(unit.get('type') or '').lower().strip()
-    if unit_type in ('video_quiz', 'audio', 'embed', 'iframe'):
+    if unit_type in ('video_quiz', 'audio', 'embed', 'iframe', 'link'):
         return False
         
     return True

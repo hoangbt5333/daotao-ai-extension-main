@@ -20,7 +20,7 @@ ALL_KNOWN_HEADERS = REQUIRED_HEADERS + OPTIONAL_HEADERS
 EXPECTED_HEADERS = REQUIRED_HEADERS + ["Slide", "Youtube"]  # Backward compatibility
 TEMPLATE_HEADERS = ["Chapter", "Lesson", "Unit", "Type", "Content", "Slide", "Youtube"]
 
-SUPPORTED_UNIT_TYPES = ["video", "pdf", "audio", "video_pdf", "embed", "text", "video_quiz"]
+SUPPORTED_UNIT_TYPES = ["video", "pdf", "audio", "video_pdf", "embed", "link", "text", "video_quiz"]
 TYPE_ALIASES = {
     "raw_html": "embed",
     "html_raw": "embed",
@@ -29,6 +29,10 @@ TYPE_ALIASES = {
     "invideoquiz": "video_quiz",
     "invideoquiz_v2": "video_quiz",
     "quiz_in_video": "video_quiz",
+    "url": "link",
+    "external_link": "link",
+    "web_link": "link",
+    "lien_ket": "link",
 }
 
 
@@ -211,6 +215,10 @@ def _build_outline(rows: List[Dict[str, str]]) -> Dict[str, Any]:
             elif tp_norm in ["embed", "raw_html", "html_raw", "iframe"]:
                 u["type"] = "embed"
                 u["embed_code"] = ct
+            elif tp_norm in ["link", "url", "external_link", "web_link", "lien_ket"]:
+                u["type"] = "link"
+                u["link_url"] = ct
+                u["content"] = ct
             elif tp_norm in ["text", "html"]:
                 u["type"] = "text"
                 u["html_content"] = ct
@@ -271,8 +279,13 @@ def _build_outline(rows: List[Dict[str, str]]) -> Dict[str, Any]:
                 elif "file" in u:
                     u["type"] = "pdf"
                 elif ct:
-                    u["type"] = "text"
-                    u["html_content"] = ct
+                    if ct.startswith(('http://', 'https://')) and ' ' not in ct:
+                        u["type"] = "link"
+                        u["link_url"] = ct
+                        u["content"] = ct
+                    else:
+                        u["type"] = "text"
+                        u["html_content"] = ct
                 else:
                     # Explicit empty unit: leave type unset (exporter defaults to text)
                     pass
@@ -485,17 +498,27 @@ def generate_outline_template_excel(settings=None) -> BytesIO:
             "",
             "",
         ],
-        # 8. text
+        # 8. link (Liên kết ngoài)
+        [
+            "",
+            "Bài 2.4: Tài liệu liên kết ngoài",
+            "2.4.1 Trang web chính thức Trường ĐH Bách Khoa Hà Nội",
+            "link",
+            "https://hust.edu.vn",
+            "",
+            "",
+        ],
+        # 9. text (Văn bản thông thường, tự động bọc thẻ <p>)
         [
             "Chương 3: Tổng kết & Ôn tập",
             "Bài 3.1: Hướng dẫn ôn tập",
             "3.1.1 Tóm tắt kiến thức cốt lõi",
             "text",
-            "<p>Bài học dạng văn bản HTML tóm tắt các điểm quan trọng trong khóa học.</p>",
+            "Bài học dạng văn bản tóm tắt các điểm quan trọng trong khóa học. Hệ thống sẽ tự động bọc các đoạn văn thành thẻ HTML <p>.",
             "",
             "",
         ],
-        # 9. Auto-detect row (Type trống, điền Slide)
+        # 10. Auto-detect row (Type trống, điền Slide)
         [
             "",
             "",
@@ -549,7 +572,8 @@ def generate_outline_template_excel(settings=None) -> BytesIO:
         ("• video_pdf: Bài giảng tích hợp video và slide PDF. Có thể khai báo đồng thời video và slide tương ứng.", normal_font),
         ("• video_quiz: Bài giảng video có câu hỏi tương tác ngắt quãng (In-Video Quiz). Cột Content điền tên file câu hỏi (.txt), cột Youtube điền link YouTube. File câu hỏi (.txt) soạn theo cú pháp QuestionBank kèm dòng @time: cho mỗi câu.", normal_font),
         ("• embed: Nhúng tài liệu ngoài (Google Drive, Docs, Sheets, Slides, Forms, OneDrive, SharePoint, Stream, YouTube...). Cột Content có thể dán mã nhúng <iframe> HOẶC dán trực tiếp đường link chia sẻ (hệ thống sẽ tự động chuyển đổi sang mã nhúng chuẩn).", normal_font),
-        ("• text: Bài giảng văn bản hoặc mã HTML trực tiếp trong cột Content.", normal_font),
+        ("• link: Liên kết ngoài (External Link) để người học truy cập trang web ngoài (báo chí, GitHub, website trường...). Cột Content dán đường link URL. Hệ thống tự động tạo giao diện liên kết ngoài an toàn mở sang tab mới.", normal_font),
+        ("• text: Bài giảng văn bản hoặc mã HTML trực tiếp trong cột Content. Nếu nhập văn bản thường, hệ thống tự động bọc các đoạn văn thành thẻ <p> tiêu chuẩn.", normal_font),
         ("", normal_font),
         ("3. QUY TẮC ĐẶT TÊN FILE TÀI NGUYÊN (THEO TÀI LIỆU HƯỚNG DẪN MỤC 3.4.2)", section_font),
         ("• Tên file PDF và MP3 cần ngắn gọn, viết liền không dấu, không chứa khoảng trắng và không chứa ký tự đặc biệt.", normal_font),

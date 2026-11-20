@@ -423,7 +423,7 @@ export default function CourseGeneratorTool() {
                   <li>
                     <b>Header tùy chọn:</b>
                     <ul style={{ margin: '4px 0', paddingLeft: 18 }}>
-                      <li><code>Type</code>: Loại bài học (<code>audio</code>, <code>pdf</code>, <code>video</code>, <code>video_quiz</code>, <code>video_pdf</code>, <code>embed</code>, <code>text</code>).</li>
+                      <li><code>Type</code>: Loại bài học (<code>audio</code>, <code>pdf</code>, <code>video</code>, <code>video_quiz</code>, <code>video_pdf</code>, <code>embed</code>, <code>link</code>, <code>text</code>).</li>
                       <li><code>Content</code>: Tên file (PDF/MP3), liên kết (YouTube/Video/GDrive/SharePoint), mã nhúng <code>&lt;iframe&gt;</code>, hoặc nội dung văn bản.</li>
                       <li><code>Slide</code>, <code>Youtube</code>: Cột truyền thống (vẫn hỗ trợ 100% để tương thích ngược với file mẫu cũ).</li>
                     </ul>
@@ -440,7 +440,8 @@ export default function CourseGeneratorTool() {
                           <li><code>Type = video_quiz</code>: Video có câu hỏi dừng tương tác (invideoquiz_v2). Cột <code>Content</code> điền tên file câu hỏi <code>.txt</code> (ví dụ: <code>quiz_bai1.txt</code>) và cột <code>Youtube</code> điền URL YouTube (hoặc ngược lại). Tải file <code>.txt</code> lên ở mục 2 bên dưới.</li>
                           <li><code>Type = video_pdf</code>: Kết hợp xem video và slide PDF (khai báo link video và file slide tương ứng).</li>
                           <li><code>Type = embed</code> (hoặc <code>iframe</code>): Nhúng Google Drive, Docs, Sheets, Slides, Forms, SharePoint, OneDrive, Stream... Cột <code>Content</code> dán link chia sẻ hoặc mã <code>&lt;iframe&gt;</code> (hệ thống tự động chuyển đổi sang mã nhúng chuẩn).</li>
-                          <li><code>Type = text</code>: Cột <code>Content</code> điền văn bản hoặc mã HTML trực tiếp.</li>
+                          <li><code>Type = link</code>: Đường link liên kết ngoài (website, báo chí, GitHub, cổng thông tin...). Cột <code>Content</code> dán URL liên kết ngoài. Người học sẽ mở trang trong tab mới an toàn.</li>
+                          <li><code>Type = text</code>: Cột <code>Content</code> điền văn bản thông thường (hệ thống tự động ngắt đoạn thành thẻ &lt;p&gt;) hoặc mã HTML trực tiếp.</li>
                         </ul>
                       </li>
                       <li>

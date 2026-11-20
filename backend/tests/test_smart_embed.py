@@ -336,3 +336,90 @@ class TestTemplateEmbedRowsAndAutoDetect:
         assert units[1]["type"] == "embed"
         assert "https://drive.google.com/file/d/1XYZ/view?usp=sharing" in units[1]["embed_code"]
 
+
+class TestLinkAndTextEnhancements:
+    def test_format_text_content_plain_text(self):
+        exporter = OpenEdXExporter()
+        raw = "Đoạn văn thứ nhất.\nĐoạn văn thứ hai."
+        res = exporter._format_text_content(raw)
+        assert res == "<p>Đoạn văn thứ nhất.</p>\n<p>Đoạn văn thứ hai.</p>"
+
+    def test_format_text_content_preserves_existing_html(self):
+        exporter = OpenEdXExporter()
+        raw = "<div><p>Đã có <b>thẻ HTML</b></p></div>"
+        res = exporter._format_text_content(raw)
+        assert res == raw
+
+    def test_format_text_content_linkifies_bare_url(self):
+        exporter = OpenEdXExporter()
+        raw = "https://hust.edu.vn"
+        res = exporter._format_text_content(raw)
+        assert '<a href="https://hust.edu.vn" target="_blank" rel="noopener noreferrer">https://hust.edu.vn</a>' in res
+
+    @pytest.mark.anyio
+    async def test_link_unit_import_excel(self):
+        from io import BytesIO
+        from openpyxl import Workbook
+        from fastapi import UploadFile
+        from app.api.v1.endpoints.outline import import_outline_excel
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Outline"
+        ws.append(["Chapter", "Lesson", "Unit", "Type", "Content", "Slide", "Youtube"])
+        ws.append([
+            "Chương 1", "Bài 1", "Unit Liên Kết Ngoài", "link",
+            "https://hust.edu.vn", "", ""
+        ])
+
+        bio = BytesIO()
+        wb.save(bio)
+        bio.seek(0)
+
+        upload = UploadFile(filename="link.xlsx", file=bio)
+        res = await import_outline_excel(upload)
+
+        assert res.success is True
+        units = res.outline["outline"][0]["subsections"][0]["units"]
+        assert len(units) == 1
+        assert units[0]["type"] == "link"
+        assert units[0]["link_url"] == "https://hust.edu.vn"
+
+    @pytest.mark.anyio
+    async def test_auto_detect_link_when_type_empty_and_url_not_embed(self):
+        from io import BytesIO
+        from openpyxl import Workbook
+        from fastapi import UploadFile
+        from app.api.v1.endpoints.outline import import_outline_excel
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Outline"
+        ws.append(["Chapter", "Lesson", "Unit", "Type", "Content", "Slide", "Youtube"])
+        ws.append([
+            "Chương 1", "Bài 1", "Unit Auto Link", "",
+            "https://hust.edu.vn", "", ""
+        ])
+
+        bio = BytesIO()
+        wb.save(bio)
+        bio.seek(0)
+
+        upload = UploadFile(filename="autolink.xlsx", file=bio)
+        res = await import_outline_excel(upload)
+
+        assert res.success is True
+        units = res.outline["outline"][0]["subsections"][0]["units"]
+        assert len(units) == 1
+        assert units[0]["type"] == "link"
+        assert units[0]["link_url"] == "https://hust.edu.vn"
+
+    def test_build_link_component_html(self):
+        exporter = OpenEdXExporter()
+        html = exporter._build_link_component_html("Bài học liên kết", "https://hust.edu.vn")
+        assert 'href="https://hust.edu.vn"' in html
+        assert 'target="_blank"' in html
+        assert 'rel="noopener noreferrer"' in html
+        assert "Truy cập liên kết" in html
+
+
