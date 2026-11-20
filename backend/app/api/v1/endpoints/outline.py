@@ -520,7 +520,7 @@ def generate_outline_template_excel(settings=None) -> BytesIO:
         ("• audio: Bài giảng âm thanh MP3. Cột Content điền tên file audio (ví dụ: bai1.mp3). Upload file ở mục 'Chọn files PDF / Audio'.", normal_font),
         ("• video_pdf: Bài giảng tích hợp video và slide PDF. Có thể khai báo đồng thời video và slide tương ứng.", normal_font),
         ("• video_quiz: Bài giảng video có câu hỏi tương tác ngắt quãng (In-Video Quiz). Cột Content điền tên file câu hỏi (.txt), cột Youtube điền link YouTube. File câu hỏi (.txt) soạn theo cú pháp QuestionBank kèm dòng @time: cho mỗi câu.", normal_font),
-        ("• embed: Nhúng tài liệu ngoài (Google Drive, OneDrive, SharePoint, Stream). Cột Content dán link chia sẻ hoặc mã <iframe>.", normal_font),
+        ("• embed: Nhúng tài liệu ngoài (Google Drive, Docs, Sheets, Slides, Forms, OneDrive, SharePoint, Stream, YouTube...). Cột Content dán link chia sẻ hoặc mã <iframe> (tự động chuyển đổi sang mã nhúng).", normal_font),
         ("• text: Bài giảng văn bản hoặc mã HTML trực tiếp trong cột Content.", normal_font),
         ("", normal_font),
         ("3. QUY TẮC ĐẶT TÊN FILE TÀI NGUYÊN (THEO TÀI LIỆU HƯỚNG DẪN MỤC 3.4.2)", section_font),

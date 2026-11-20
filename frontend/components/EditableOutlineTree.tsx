@@ -479,10 +479,10 @@ export default function EditableOutlineTree({
                     multiline
                     rows={3}
                     label="Mã nhúng iframe hoặc URL"
-                    placeholder='<iframe src="https://drive.google.com/file/d/.../preview" width="1200" height="640"></iframe>'
+                    placeholder='https://drive.google.com/file/d/.../view hoặc dán mã <iframe src="..."></iframe>'
                     value={editDialog.embedCode || ''}
                     onChange={(e) => setEditDialog(editDialog ? { ...editDialog, embedCode: e.target.value } : null)}
-                    helperText="Dán mã nhúng <iframe> từ Google Drive, SharePoint, Microsoft Stream hoặc dán đường link chia sẻ"
+                    helperText="Dán link chia sẻ (Google Drive, Docs, Sheets, Slides, Forms, SharePoint, Stream, YouTube...) hoặc mã <iframe>. Hệ thống sẽ tự động tạo mã nhúng chuẩn."
                     sx={{ mb: 2 }}
                   />
                 </Box>

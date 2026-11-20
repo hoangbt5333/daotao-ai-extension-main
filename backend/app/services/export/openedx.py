@@ -15,6 +15,7 @@ from app.services.export.base import Exporter
 from app.services.export.helpers import resolve_question_display_name
 from app.services.export.video_quiz_helper import build_invideoquiz_unit
 from app.services.export.video_quiz_helper import extract_youtube_id
+from app.services.export.embed_helper import build_embed_iframe
 from app.core.logging import get_logger
 
 
@@ -228,40 +229,16 @@ class OpenEdXExporter(Exporter):
         return ET.tostring(sequential_elem, encoding='unicode')
     
     def _sanitize_embed(self, code_or_url: str) -> str:
-        """Sanitize embed code or wrap direct URL into a safe <iframe>.
-
-        Handles:
-        1. Plain URL:
-           - Google Drive: extracts file ID and wraps with preview iframe (1200x640, allow="autoplay")
-           - Other URLs: wraps into a safe responsive iframe
-        2. HTML embed code:
-           - Strips <script> tags and inline JS event handlers (onload, onerror, onclick, etc.)
-           - Strips javascript: URLs
+        """Sanitize embed code or wrap direct URL into a safe, responsive <iframe>.
+        
+        Delegates to embed_helper.build_embed_iframe which supports:
+        - Google Workspace: Drive, Docs, Sheets, Slides, Forms
+        - Microsoft 365: SharePoint Doc.aspx, Stream
+        - Video / Interactive: YouTube, Vimeo, Loom, Canva, Quizlet
+        - XSS sanitization & upgrading inner iframe src from share links to embed links
+        - SharePoint shortened links resolution (1drv.ms, /:p:/g/)
         """
-        raw = (code_or_url or "").strip()
-        if not raw:
-            return '<p>Nội dung nhúng không tồn tại.</p>'
-
-        # Case 1: Pure URL provided
-        if raw.startswith(('http://', 'https://')) and '<' not in raw:
-            # Check for Google Drive file link
-            gdrive_match = re.search(r'drive\.google\.com/file/d/([a-zA-Z0-9_-]+)', raw)
-            if gdrive_match:
-                file_id = gdrive_match.group(1)
-                preview_url = f"https://drive.google.com/file/d/{file_id}/preview"
-                return f'<iframe src="{preview_url}" width="1200" height="640" allow="autoplay"></iframe>'
-
-            # Default iframe for other URLs
-            escaped_url = raw.replace('"', '&quot;')
-            return f'<iframe src="{escaped_url}" width="100%" height="600px" frameborder="0" allowfullscreen></iframe>'
-
-        # Case 2: HTML snippet (strip script tags and on* event handlers)
-        sanitized = re.sub(r'<\s*script[^>]*>.*?<\s*/\s*script\s*>', '', raw, flags=re.IGNORECASE | re.DOTALL)
-        sanitized = re.sub(r'<\s*style[^>]*>.*?<\s*/\s*style\s*>', '', sanitized, flags=re.IGNORECASE | re.DOTALL)
-        sanitized = re.sub(r'\s+on[a-zA-Z]+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)', '', sanitized)
-        sanitized = re.sub(r'(src|href)\s*=\s*["\']\s*javascript:[^"\']*["\']', '', sanitized, flags=re.IGNORECASE)
-
-        return sanitized.strip()
+        return build_embed_iframe(code_or_url)
 
     def _write_html_component(self, html_uuid: str, display_name: str, html_body: str, editor_raw: bool = False) -> None:
         """Write a pair of html/{uuid}.xml and html/{uuid}.html files.

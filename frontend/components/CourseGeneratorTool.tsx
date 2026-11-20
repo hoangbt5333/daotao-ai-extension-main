@@ -439,7 +439,7 @@ export default function CourseGeneratorTool() {
                           <li><code>Type = video</code>: Cột <code>Content</code> (hoặc <code>Youtube</code>) điền URL YouTube hoặc link video.</li>
                           <li><code>Type = video_quiz</code>: Video có câu hỏi dừng tương tác (invideoquiz_v2). Cột <code>Content</code> điền tên file câu hỏi <code>.txt</code> (ví dụ: <code>quiz_bai1.txt</code>) và cột <code>Youtube</code> điền URL YouTube (hoặc ngược lại). Tải file <code>.txt</code> lên ở mục 2 bên dưới.</li>
                           <li><code>Type = video_pdf</code>: Kết hợp xem video và slide PDF (khai báo link video và file slide tương ứng).</li>
-                          <li><code>Type = embed</code> (hoặc <code>iframe</code>): Nhúng Google Drive, SharePoint, OneDrive, Stream. Cột <code>Content</code> dán link chia sẻ hoặc mã <code>&lt;iframe&gt;</code> (link Google Drive sẽ tự động tạo iframe preview).</li>
+                          <li><code>Type = embed</code> (hoặc <code>iframe</code>): Nhúng Google Drive, Docs, Sheets, Slides, Forms, SharePoint, OneDrive, Stream... Cột <code>Content</code> dán link chia sẻ hoặc mã <code>&lt;iframe&gt;</code> (hệ thống tự động chuyển đổi sang mã nhúng chuẩn).</li>
                           <li><code>Type = text</code>: Cột <code>Content</code> điền văn bản hoặc mã HTML trực tiếp.</li>
                         </ul>
                       </li>
