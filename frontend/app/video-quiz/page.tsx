@@ -1,5 +1,5 @@
-import VideoQuizTool from '@/components/VideoQuizTool';
+import { redirect } from "next/navigation";
 
 export default function VideoQuizPage() {
-  return <VideoQuizTool />;
+  redirect("/create-outline");
 } 

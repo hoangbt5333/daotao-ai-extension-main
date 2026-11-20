@@ -624,7 +624,7 @@ export default function CourseGeneratorTool() {
                       size="small"
                       sx={{ textTransform: 'none' }}
                     >
-                      + Thêm file
+                      Thêm file
                     </Button>
                   </label>
                 </Box>
