@@ -58,6 +58,35 @@ def resolve_sharepoint_redirect(url: str, timeout: float = 3.0) -> str:
 resolve_redirect_url = resolve_sharepoint_redirect
 
 
+def is_embed_content(text: str) -> bool:
+    """Check if the given text is an HTML <iframe> snippet or a supported cloud shareable/embed link."""
+    if not text:
+        return False
+    s = text.strip()
+    if "<iframe" in s.lower():
+        return True
+    if s.startswith(("http://", "https://")) and "<" not in s:
+        if is_shortened_sharepoint_url(s):
+            return True
+        converted = convert_share_url_to_embed_url(s)
+        if converted != s or any(
+            d in s.lower()
+            for d in (
+                "drive.google.com",
+                "docs.google.com",
+                "sharepoint.com",
+                "1drv.ms",
+                "microsoftstream.com",
+                "vimeo.com",
+                "loom.com",
+                "canva.com",
+                "quizlet.com",
+            )
+        ):
+            return True
+    return False
+
+
 def convert_share_url_to_embed_url(url: str) -> str:
     """Convert common sharing links into their iframe embeddable URL format.
     

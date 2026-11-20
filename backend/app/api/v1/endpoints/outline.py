@@ -8,6 +8,7 @@ from openpyxl import Workbook, load_workbook
 import csv
 from app.models.schemas.responses import OutlineImportResponse
 from app.config.settings import get_settings
+from app.services.export.embed_helper import is_embed_content
 
 
 router = APIRouter()
@@ -237,27 +238,44 @@ def _build_outline(rows: List[Dict[str, str]]) -> Dict[str, Any]:
                 if ct:
                     u["content"] = ct
         else:
-            # Fallback 100% logic cũ dựa trên Slide và Youtube
-            if yt:
-                u["video_url"] = yt
-            if sl:
-                if "video_url" in u:
-                    u["pdf_file"] = sl
-                else:
-                    u["file"] = sl
-
-            if "video_url" in u and ("pdf_file" in u or "file" in u):
-                if "file" in u and "pdf_file" not in u:
-                    u["pdf_file"] = u["file"]
-                    del u["file"]
-                u["type"] = "video_pdf"
-            elif "video_url" in u:
-                u["type"] = "video"
-            elif "file" in u:
-                u["type"] = "pdf"
+            # Fallback auto-detect khi không có cột Type hoặc Type để trống:
+            # 1. Nếu Content có chứa mã iframe hoặc link cloud shareable -> tự nhận diện là embed
+            if ct and is_embed_content(ct):
+                u["type"] = "embed"
+                u["embed_code"] = ct
+            elif yt and is_embed_content(yt) and ("drive.google.com" in yt.lower() or "sharepoint.com" in yt.lower() or "<iframe" in yt.lower()):
+                # Link cloud dán vào cột Youtube
+                u["type"] = "embed"
+                u["embed_code"] = yt
+            elif sl and is_embed_content(sl) and sl.startswith(("http://", "https://", "<iframe")):
+                # Link cloud dán vào cột Slide
+                u["type"] = "embed"
+                u["embed_code"] = sl
             else:
-                # Explicit empty unit: leave type unset (exporter defaults to text)
-                pass
+                # Logic 5 cột truyền thống dựa trên Slide và Youtube
+                if yt:
+                    u["video_url"] = yt
+                if sl:
+                    if "video_url" in u:
+                        u["pdf_file"] = sl
+                    else:
+                        u["file"] = sl
+
+                if "video_url" in u and ("pdf_file" in u or "file" in u):
+                    if "file" in u and "pdf_file" not in u:
+                        u["pdf_file"] = u["file"]
+                        del u["file"]
+                    u["type"] = "video_pdf"
+                elif "video_url" in u:
+                    u["type"] = "video"
+                elif "file" in u:
+                    u["type"] = "pdf"
+                elif ct:
+                    u["type"] = "text"
+                    u["html_content"] = ct
+                else:
+                    # Explicit empty unit: leave type unset (exporter defaults to text)
+                    pass
 
     return {"outline": chapters}
 
@@ -447,17 +465,27 @@ def generate_outline_template_excel(settings=None) -> BytesIO:
             "",
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         ],
-        # 6. embed
+        # 6. embed (Mã nhúng HTML iframe)
         [
             "",
             "Bài 2.3: Tài liệu tương tác trực tuyến",
-            "2.3.1 Tài liệu nhúng Google Drive",
+            "2.3.1 Tài liệu nhúng Google Drive (Mã iframe)",
             "embed",
-            "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/preview",
+            '<iframe src="https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/preview" width="1200" height="640"></iframe>',
             "",
             "",
         ],
-        # 6. text
+        # 7. embed (Đường link chia sẻ trực tiếp)
+        [
+            "",
+            "",
+            "2.3.2 Tài liệu liên kết chia sẻ Google Drive (Link share)",
+            "embed",
+            "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/view?usp=sharing",
+            "",
+            "",
+        ],
+        # 8. text
         [
             "Chương 3: Tổng kết & Ôn tập",
             "Bài 3.1: Hướng dẫn ôn tập",
@@ -467,7 +495,7 @@ def generate_outline_template_excel(settings=None) -> BytesIO:
             "",
             "",
         ],
-        # 7. Auto-detect row (Type trống, điền Slide)
+        # 9. Auto-detect row (Type trống, điền Slide)
         [
             "",
             "",
@@ -520,7 +548,7 @@ def generate_outline_template_excel(settings=None) -> BytesIO:
         ("• audio: Bài giảng âm thanh MP3. Cột Content điền tên file audio (ví dụ: bai1.mp3). Upload file ở mục 'Chọn files PDF / Audio'.", normal_font),
         ("• video_pdf: Bài giảng tích hợp video và slide PDF. Có thể khai báo đồng thời video và slide tương ứng.", normal_font),
         ("• video_quiz: Bài giảng video có câu hỏi tương tác ngắt quãng (In-Video Quiz). Cột Content điền tên file câu hỏi (.txt), cột Youtube điền link YouTube. File câu hỏi (.txt) soạn theo cú pháp QuestionBank kèm dòng @time: cho mỗi câu.", normal_font),
-        ("• embed: Nhúng tài liệu ngoài (Google Drive, Docs, Sheets, Slides, Forms, OneDrive, SharePoint, Stream, YouTube...). Cột Content dán link chia sẻ hoặc mã <iframe> (tự động chuyển đổi sang mã nhúng).", normal_font),
+        ("• embed: Nhúng tài liệu ngoài (Google Drive, Docs, Sheets, Slides, Forms, OneDrive, SharePoint, Stream, YouTube...). Cột Content có thể dán mã nhúng <iframe> HOẶC dán trực tiếp đường link chia sẻ (hệ thống sẽ tự động chuyển đổi sang mã nhúng chuẩn).", normal_font),
         ("• text: Bài giảng văn bản hoặc mã HTML trực tiếp trong cột Content.", normal_font),
         ("", normal_font),
         ("3. QUY TẮC ĐẶT TÊN FILE TÀI NGUYÊN (THEO TÀI LIỆU HƯỚNG DẪN MỤC 3.4.2)", section_font),

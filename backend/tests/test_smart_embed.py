@@ -13,6 +13,7 @@ from app.services.export.embed_helper import (
     sanitize_embed_html,
     resolve_sharepoint_redirect,
     is_shortened_sharepoint_url,
+    is_embed_content,
 )
 from app.services.export.openedx import OpenEdXExporter
 
@@ -252,3 +253,86 @@ class TestExporterIntegration:
         html_sp = exporter._sanitize_embed(sp_url)
         assert "action=embedview" in html_sp
         assert "action=default" not in html_sp
+
+
+class TestIsEmbedContent:
+    def test_detects_iframe(self):
+        assert is_embed_content('<iframe src="https://example.com"></iframe>')
+        assert is_embed_content('  <IFRAME SRC="https://drive.google.com/test"></IFRAME>  ')
+
+    def test_detects_cloud_links(self):
+        assert is_embed_content("https://drive.google.com/file/d/123/view")
+        assert is_embed_content("https://docs.google.com/document/d/abc/edit")
+        assert is_embed_content("https://docs.google.com/spreadsheets/d/xyz/edit")
+        assert is_embed_content("https://docs.google.com/presentation/d/uvw/edit")
+        assert is_embed_content("https://husteduvn-my.sharepoint.com/personal/abc/Doc.aspx?sourcedoc={123}")
+        assert is_embed_content("https://1drv.ms/p/s!Amx123")
+        assert is_embed_content("https://forms.gle/XYZ123")
+        assert is_embed_content("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+
+    def test_rejects_non_embed_content(self):
+        assert not is_embed_content("bai_giang_so_1.pdf")
+        assert not is_embed_content("audio_lesson.mp3")
+        assert not is_embed_content("<p>Đây là bài học văn bản HTML</p>")
+        assert not is_embed_content("Nội dung tóm tắt chương 1")
+
+
+class TestTemplateEmbedRowsAndAutoDetect:
+    @pytest.mark.anyio
+    async def test_template_contains_both_iframe_and_share_link_examples(self):
+        from io import BytesIO
+        from openpyxl import load_workbook
+        from app.api.v1.endpoints.outline import download_outline_template
+
+        resp = await download_outline_template()
+        wb = load_workbook(BytesIO(resp.body), data_only=True)
+        ws = wb["Mẫu"]
+        rows = list(ws.iter_rows(min_row=2, values_only=True))
+
+        # Check for embed rows
+        embed_rows = [r for r in rows if r[3] == "embed"]
+        assert len(embed_rows) >= 2, "Cần có cả 2 dòng ví dụ cho embed: 1 dòng iframe và 1 dòng link share"
+
+        # One row has iframe
+        has_iframe = any("<iframe" in (r[4] or "") for r in embed_rows)
+        # One row has direct share URL
+        has_share_url = any("view?usp=sharing" in (r[4] or "") for r in embed_rows)
+
+        assert has_iframe, "Thiếu dòng ví dụ mã nhúng <iframe> cho embed trong sheet Mẫu"
+        assert has_share_url, "Thiếu dòng ví dụ đường link chia sẻ trực tiếp cho embed trong sheet Mẫu"
+
+    @pytest.mark.anyio
+    async def test_auto_detect_embed_when_type_column_is_empty(self):
+        from io import BytesIO
+        from openpyxl import Workbook
+        from fastapi import UploadFile
+        from app.api.v1.endpoints.outline import import_outline_excel
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Outline"
+        ws.append(["Chapter", "Lesson", "Unit", "Type", "Content", "Slide", "Youtube"])
+        ws.append([
+            "Chương 1", "Bài 1", "Unit 1 Embed Iframe", "",
+            '<iframe src="https://drive.google.com/file/d/1ABC/preview"></iframe>', "", ""
+        ])
+        ws.append([
+            "", "", "Unit 2 Embed Share Link", "",
+            "https://drive.google.com/file/d/1XYZ/view?usp=sharing", "", ""
+        ])
+
+        bio = BytesIO()
+        wb.save(bio)
+        bio.seek(0)
+
+        upload = UploadFile(filename="autodetect.xlsx", file=bio)
+        res = await import_outline_excel(upload)
+
+        assert res.success is True
+        units = res.outline["outline"][0]["subsections"][0]["units"]
+        assert len(units) == 2
+        assert units[0]["type"] == "embed"
+        assert '<iframe src="https://drive.google.com/file/d/1ABC/preview">' in units[0]["embed_code"]
+        assert units[1]["type"] == "embed"
+        assert "https://drive.google.com/file/d/1XYZ/view?usp=sharing" in units[1]["embed_code"]
+
