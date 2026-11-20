@@ -36,17 +36,20 @@ import AudioFileIcon from '@mui/icons-material/AudioFile';
 import CodeIcon from '@mui/icons-material/Code';
 import UploadIcon from '@mui/icons-material/Upload';
 import QuizIcon from '@mui/icons-material/Quiz';
+import LinkIcon from '@mui/icons-material/Link';
 
 // Outline data type
 interface OutlineUnit {
   title: string;
-  type?: 'video' | 'pdf' | 'docx' | 'text' | 'video_pdf' | 'audio' | 'embed' | 'video_quiz';
+  type?: 'video' | 'pdf' | 'docx' | 'text' | 'video_pdf' | 'audio' | 'embed' | 'video_quiz' | 'link';
   file?: File | null;
   fileUrl?: string;
   video_url?: string; // For video, video_pdf, video_quiz types
   pdf_file?: string; // For video_pdf type
   audio_file?: string; // For audio type
   embed_code?: string; // For embed type (iframe, GDrive, SharePoint)
+  link_url?: string; // For link type (external URL)
+  html_content?: string; // For text type
   quiz_file?: string; // For video_quiz type (.txt filename)
   content?: string; // For quiz file or general content
 }
@@ -89,11 +92,13 @@ export default function EditableOutlineTree({
     unitIdx?: number, 
     value: string, 
     mode: 'edit'|'add',
-    unitType?: 'video' | 'pdf' | 'docx' | 'text' | 'video_pdf' | 'audio' | 'embed' | 'video_quiz',
+    unitType?: 'video' | 'pdf' | 'docx' | 'text' | 'video_pdf' | 'audio' | 'embed' | 'video_quiz' | 'link',
     unitFile?: File | null,
     pdfFile?: File | null,
     videoUrl?: string,
     embedCode?: string,
+    linkUrl?: string,
+    textContent?: string,
     quizFileName?: string
   }>(null);
 
@@ -115,6 +120,8 @@ export default function EditableOutlineTree({
         pdfFile: unit?.pdf_file ? new File([], unit.pdf_file) : null,
         videoUrl: unit?.video_url || '',
         embedCode: unit?.embed_code || '',
+        linkUrl: unit?.link_url || (unit?.type === 'link' ? unit?.content : '') || '',
+        textContent: unit?.html_content || (unit?.type === 'text' ? unit?.content : '') || '',
         quizFileName: unit?.quiz_file || (unit?.type === 'video_quiz' ? unit?.content : '') || ''
       });
     } else {
@@ -140,7 +147,7 @@ export default function EditableOutlineTree({
   
   const handleDialogSave = () => {
     if (!editDialog) return;
-    const { type, chapterIdx, subIdx, unitIdx, value, mode, unitType, unitFile, pdfFile, videoUrl, embedCode, quizFileName } = editDialog;
+    const { type, chapterIdx, subIdx, unitIdx, value, mode, unitType, unitFile, pdfFile, videoUrl, embedCode, linkUrl, textContent, quizFileName } = editDialog;
     const newData = JSON.parse(JSON.stringify(safeOutlineData));
     
     if (type === 'chapter') {
@@ -178,6 +185,18 @@ export default function EditableOutlineTree({
         unitData.embed_code = embedCode;
       }
 
+      // Add link_url for link type
+      if (unitType === 'link' && linkUrl) {
+        unitData.link_url = linkUrl;
+        unitData.content = linkUrl;
+      }
+
+      // Add html_content for text type
+      if (unitType === 'text' && textContent) {
+        unitData.html_content = textContent;
+        unitData.content = textContent;
+      }
+
       // Add quiz_file for video_quiz type
       if (unitType === 'video_quiz') {
         const qName = unitFile ? unitFile.name : (quizFileName || '');
@@ -205,6 +224,7 @@ export default function EditableOutlineTree({
       case 'pdf': return <PictureAsPdfIcon fontSize="small" />;
       case 'audio': return <AudioFileIcon fontSize="small" />;
       case 'embed': return <CodeIcon fontSize="small" />;
+      case 'link': return <LinkIcon fontSize="small" />;
       case 'docx': return <DescriptionIcon fontSize="small" />;
       case 'video_pdf': return <VideoFileIcon fontSize="small" />;
       case 'video_quiz': return <QuizIcon fontSize="small" />;
@@ -218,6 +238,7 @@ export default function EditableOutlineTree({
       case 'pdf': return 'PDF';
       case 'audio': return 'Audio (.mp3)';
       case 'embed': return 'Nhúng (Embed / Iframe)';
+      case 'link': return 'Liên kết ngoài (Link)';
       case 'docx': return 'DOCX';
       case 'video_pdf': return 'Video + PDF';
       case 'video_quiz': return 'Video Quiz (In-Video)';
@@ -441,11 +462,12 @@ export default function EditableOutlineTree({
                   label="Loại học liệu"
                   onChange={(e) => setEditDialog(editDialog ? { ...editDialog, unitType: e.target.value as any } : null)}
                 >
-                  <MenuItem value="text">Text</MenuItem>
+                  <MenuItem value="text">Text (Văn bản)</MenuItem>
                   <MenuItem value="video">Video</MenuItem>
                   <MenuItem value="pdf">PDF</MenuItem>
                   <MenuItem value="audio">Audio (.mp3)</MenuItem>
                   <MenuItem value="embed">Nhúng (GDrive / SharePoint / iframe)</MenuItem>
+                  <MenuItem value="link">Liên kết ngoài (Link)</MenuItem>
                   <MenuItem value="docx">DOCX</MenuItem>
                   <MenuItem value="video_pdf">Video + PDF</MenuItem>
                   <MenuItem value="video_quiz">Video Quiz (In-Video)</MenuItem>
@@ -479,10 +501,46 @@ export default function EditableOutlineTree({
                     multiline
                     rows={3}
                     label="Mã nhúng iframe hoặc URL"
-                    placeholder='<iframe src="https://drive.google.com/file/d/.../preview" width="1200" height="640"></iframe>'
+                    placeholder='https://drive.google.com/file/d/.../view hoặc dán mã <iframe src="..."></iframe>'
                     value={editDialog.embedCode || ''}
                     onChange={(e) => setEditDialog(editDialog ? { ...editDialog, embedCode: e.target.value } : null)}
-                    helperText="Dán mã nhúng <iframe> từ Google Drive, SharePoint, Microsoft Stream hoặc dán đường link chia sẻ"
+                    helperText="Dán link chia sẻ (Google Drive, Docs, Sheets, Slides, Forms, SharePoint, Stream, YouTube...) hoặc mã <iframe>. Hệ thống sẽ tự động tạo mã nhúng chuẩn."
+                    sx={{ mb: 2 }}
+                  />
+                </Box>
+              )}
+
+              {editDialog.unitType === 'link' && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Đường link liên kết ngoài:
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    label="URL liên kết ngoài"
+                    placeholder="https://hust.edu.vn"
+                    value={editDialog.linkUrl || ''}
+                    onChange={(e) => setEditDialog(editDialog ? { ...editDialog, linkUrl: e.target.value } : null)}
+                    helperText="Dán đường link website ngoài (báo chí, GitHub, website trường...). Người học sẽ mở liên kết trong tab mới."
+                    sx={{ mb: 2 }}
+                  />
+                </Box>
+              )}
+
+              {editDialog.unitType === 'text' && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Nội dung bài giảng văn bản:
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={4}
+                    label="Văn bản hoặc mã HTML"
+                    placeholder="Nhập nội dung bài học. Nếu nhập văn bản thường, hệ thống sẽ tự động định dạng thành các đoạn văn bản chuẩn."
+                    value={editDialog.textContent || ''}
+                    onChange={(e) => setEditDialog(editDialog ? { ...editDialog, textContent: e.target.value } : null)}
+                    helperText="Có thể nhập văn bản thông thường (hệ thống tự động bọc thẻ <p>) hoặc mã HTML trực tiếp."
                     sx={{ mb: 2 }}
                   />
                 </Box>

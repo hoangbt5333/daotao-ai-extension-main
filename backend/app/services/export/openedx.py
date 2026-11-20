@@ -15,6 +15,7 @@ from app.services.export.base import Exporter
 from app.services.export.helpers import resolve_question_display_name
 from app.services.export.video_quiz_helper import build_invideoquiz_unit
 from app.services.export.video_quiz_helper import extract_youtube_id
+from app.services.export.embed_helper import build_embed_iframe
 from app.core.logging import get_logger
 
 
@@ -228,40 +229,16 @@ class OpenEdXExporter(Exporter):
         return ET.tostring(sequential_elem, encoding='unicode')
     
     def _sanitize_embed(self, code_or_url: str) -> str:
-        """Sanitize embed code or wrap direct URL into a safe <iframe>.
-
-        Handles:
-        1. Plain URL:
-           - Google Drive: extracts file ID and wraps with preview iframe (1200x640, allow="autoplay")
-           - Other URLs: wraps into a safe responsive iframe
-        2. HTML embed code:
-           - Strips <script> tags and inline JS event handlers (onload, onerror, onclick, etc.)
-           - Strips javascript: URLs
+        """Sanitize embed code or wrap direct URL into a safe, responsive <iframe>.
+        
+        Delegates to embed_helper.build_embed_iframe which supports:
+        - Google Workspace: Drive, Docs, Sheets, Slides, Forms
+        - Microsoft 365: SharePoint Doc.aspx, Stream
+        - Video / Interactive: YouTube, Vimeo, Loom, Canva, Quizlet
+        - XSS sanitization & upgrading inner iframe src from share links to embed links
+        - SharePoint shortened links resolution (1drv.ms, /:p:/g/)
         """
-        raw = (code_or_url or "").strip()
-        if not raw:
-            return '<p>Nội dung nhúng không tồn tại.</p>'
-
-        # Case 1: Pure URL provided
-        if raw.startswith(('http://', 'https://')) and '<' not in raw:
-            # Check for Google Drive file link
-            gdrive_match = re.search(r'drive\.google\.com/file/d/([a-zA-Z0-9_-]+)', raw)
-            if gdrive_match:
-                file_id = gdrive_match.group(1)
-                preview_url = f"https://drive.google.com/file/d/{file_id}/preview"
-                return f'<iframe src="{preview_url}" width="1200" height="640" allow="autoplay"></iframe>'
-
-            # Default iframe for other URLs
-            escaped_url = raw.replace('"', '&quot;')
-            return f'<iframe src="{escaped_url}" width="100%" height="600px" frameborder="0" allowfullscreen></iframe>'
-
-        # Case 2: HTML snippet (strip script tags and on* event handlers)
-        sanitized = re.sub(r'<\s*script[^>]*>.*?<\s*/\s*script\s*>', '', raw, flags=re.IGNORECASE | re.DOTALL)
-        sanitized = re.sub(r'<\s*style[^>]*>.*?<\s*/\s*style\s*>', '', sanitized, flags=re.IGNORECASE | re.DOTALL)
-        sanitized = re.sub(r'\s+on[a-zA-Z]+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)', '', sanitized)
-        sanitized = re.sub(r'(src|href)\s*=\s*["\']\s*javascript:[^"\']*["\']', '', sanitized, flags=re.IGNORECASE)
-
-        return sanitized.strip()
+        return build_embed_iframe(code_or_url)
 
     def _write_html_component(self, html_uuid: str, display_name: str, html_body: str, editor_raw: bool = False) -> None:
         """Write a pair of html/{uuid}.xml and html/{uuid}.html files.
@@ -286,6 +263,51 @@ class OpenEdXExporter(Exporter):
             f.write(html_body)
 
         self.logger.info(f"Created html component: {html_uuid}")
+
+    def _format_text_content(self, raw: str) -> str:
+        """Format text content into proper HTML paragraph elements.
+        
+        If raw string already contains HTML tags, returns as-is.
+        If raw string is plain text, wraps lines/paragraphs into <p> tags.
+        If a line is a bare URL, converts it to a clickable link.
+        """
+        if not raw or not raw.strip():
+            return "<p></p>"
+        s = raw.strip()
+        # If already contains HTML markup
+        if bool(re.search(r'<\s*[a-zA-Z][^>]*>', s)):
+            return s
+        # Plain text: split paragraphs by newline
+        lines = [line.strip() for line in s.splitlines() if line.strip()]
+        if not lines:
+            return "<p></p>"
+        paragraphs = []
+        for line in lines:
+            if line.startswith(('http://', 'https://')) and ' ' not in line:
+                safe_url = line.replace('"', '&quot;')
+                paragraphs.append(f'<p><a href="{safe_url}" target="_blank" rel="noopener noreferrer">{safe_url}</a></p>')
+            else:
+                paragraphs.append(f'<p>{line}</p>')
+        return "\n".join(paragraphs)
+
+    def _build_link_component_html(self, title: str, url: str) -> str:
+        """Build HTML component body for external link unit."""
+        clean_url = (url or "").strip()
+        if not clean_url:
+            return "<p>Liên kết không tồn tại.</p>"
+        safe_url = clean_url.replace('"', '&quot;')
+        return (
+            f'<div class="external-link-card" style="padding: 16px 20px; border: 1px solid #e0e0e0; border-radius: 8px; background-color: #f9fbfd; margin: 12px 0;">\n'
+            f'  <h4 style="margin: 0 0 8px 0; color: #1a1a1a;">🔗 Liên kết ngoài cho bài học:</h4>\n'
+            f'  <p style="margin: 0 0 14px 0; color: #555;">Bấm vào nút bên dưới để mở liên kết trong tab mới:</p>\n'
+            f'  <p style="margin: 0;">\n'
+            f'    <a href="{safe_url}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 10px 22px; background-color: #0075b4; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px;">\n'
+            f'      Truy cập liên kết ↗\n'
+            f'    </a>\n'
+            f'  </p>\n'
+            f'  <p style="margin: 12px 0 0 0; font-size: 13px; color: #777;">URL: <a href="{safe_url}" target="_blank" rel="noopener noreferrer" style="color: #0075b4; word-break: break-all;">{safe_url}</a></p>\n'
+            f'</div>'
+        )
 
     def _create_vertical_xml(self, vertical_title: str, unit_data: Dict[str, Any], vertical_id: str) -> str:
         """Create vertical.xml file.
@@ -379,6 +401,15 @@ class OpenEdXExporter(Exporter):
                 embed_html = self._sanitize_embed(embed_code)
                 self._write_html_component(html_uuid, vertical_title, embed_html, editor_raw=True)
 
+            elif unit_type in ['link', 'url', 'external_link']:
+                # Link: liên kết ngoài mở tab mới
+                html_uuid = self._generate_uuid()
+                html_elem = ET.SubElement(vertical_elem, "html")
+                html_elem.set("url_name", html_uuid)
+                link_url = unit_data.get('link_url') or unit_data.get('content', '') or ''
+                link_html = self._build_link_component_html(vertical_title, link_url)
+                self._write_html_component(html_uuid, vertical_title, link_html)
+
             elif unit_type == 'docx':
                 # DOCX: phần mềm không đọc được nội dung file DOCX hiện tại;
                 # tạo placeholder HTML — nội dung sẽ được điền ở task sau.
@@ -388,11 +419,12 @@ class OpenEdXExporter(Exporter):
                 self._write_html_component(html_uuid, vertical_title, '<p>(Nội dung DOCX)</p>')
 
             else:
-                # Default: text/HTML trơn
+                # Default: text/HTML trơn (tự động bọc <p> nếu là plain text)
                 html_uuid = self._generate_uuid()
                 text_elem = ET.SubElement(vertical_elem, "html")
                 text_elem.set("url_name", html_uuid)
-                html_body = unit_data.get('html_content', '') or '<p></p>'
+                raw_body = unit_data.get('html_content', '') or unit_data.get('content', '') or '<p></p>'
+                html_body = self._format_text_content(raw_body)
                 self._write_html_component(html_uuid, vertical_title, html_body)
 
         return ET.tostring(vertical_elem, encoding='unicode')
