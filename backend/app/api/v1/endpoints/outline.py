@@ -571,7 +571,7 @@ def generate_outline_template_excel(settings=None) -> BytesIO:
         ("• audio: Bài giảng âm thanh MP3. Cột Content điền tên file audio (ví dụ: bai1.mp3). Upload file ở mục 'Chọn files PDF / Audio'.", normal_font),
         ("• video_pdf: Bài giảng tích hợp video và slide PDF. Có thể khai báo đồng thời video và slide tương ứng.", normal_font),
         ("• video_quiz: Bài giảng video có câu hỏi tương tác ngắt quãng (In-Video Quiz). Cột Content điền tên file câu hỏi (.txt), cột Youtube điền link YouTube. File câu hỏi (.txt) soạn theo cú pháp QuestionBank kèm dòng @time: cho mỗi câu.", normal_font),
-        ("• embed: Nhúng tài liệu ngoài (Google Drive, Docs, Sheets, Slides, Forms, OneDrive, SharePoint, Stream, YouTube...). Cột Content có thể dán mã nhúng <iframe> HOẶC dán trực tiếp đường link chia sẻ (hệ thống sẽ tự động chuyển đổi sang mã nhúng chuẩn).", normal_font),
+        ("• embed: Nhúng tài liệu ngoài (Google Drive, Docs, Sheets, Slides, Forms, OneDrive, SharePoint, Stream, YouTube...). Cột Content có thể dán mã nhúng <iframe> HOẶC dán trực tiếp đường link chia sẻ (hệ thống tự động chuyển đổi sang mã nhúng chuẩn và tối ưu kích thước hiển thị: Google Drive 1200x640, SharePoint/OneDrive 900x640, hoặc người dùng có thể tự chỉnh width/height trong mã iframe).", normal_font),
         ("• link: Liên kết ngoài (External Link) để người học truy cập trang web ngoài (báo chí, GitHub, website trường...). Cột Content dán đường link URL. Hệ thống tự động tạo giao diện liên kết ngoài an toàn mở sang tab mới.", normal_font),
         ("• text: Bài giảng văn bản hoặc mã HTML trực tiếp trong cột Content. Nếu nhập văn bản thường, hệ thống tự động bọc các đoạn văn thành thẻ <p> tiêu chuẩn.", normal_font),
         ("", normal_font),
