@@ -802,8 +802,9 @@ def test_embed_unit_sanitizes_xss():
                 # Thuộc tính inline on* phải bị loại bỏ
                 assert "onload" not in content.lower()
                 assert "onclick" not in content.lower()
-                # Thẻ iframe an toàn vẫn được giữ lại
-                assert '<iframe src="https://drive.google.com/test/preview"' in content
+                # Thẻ iframe an toàn vẫn được giữ lại với src hợp lệ
+                assert "<iframe" in content
+                assert 'src="https://drive.google.com/test/preview"' in content
 
 
 def test_embed_unit_converts_plain_gdrive_url_to_preview_iframe():

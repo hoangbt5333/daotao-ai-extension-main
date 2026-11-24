@@ -269,7 +269,31 @@ def sanitize_embed_html(raw_html: str) -> str:
         new_src = convert_share_url_to_embed_url(old_src)
         # Escape quotes in src
         safe_src = new_src.replace('"', '&quot;') if quote == '"' else new_src.replace("'", "&#39;")
-        return re.sub(r'src=(["\']).*?\1', f'src={quote}{safe_src}{quote}', iframe_tag, count=1, flags=re.IGNORECASE)
+        updated_tag = re.sub(r'src=(["\']).*?\1', f'src={quote}{safe_src}{quote}', iframe_tag, count=1, flags=re.IGNORECASE)
+
+        # Dimension adjustment:
+        # Microsoft SharePoint / OneDrive default embed dimensions are tiny (476px x 288px).
+        # We auto-upgrade them to (900, 640). If missing width/height, we also supply 900x640.
+        # Custom user-defined dimensions (e.g. 1000px, 800px) are preserved.
+        if any(k in new_src for k in ("sharepoint.com", "1drv.ms", "Doc.aspx", "Stream.aspx", "microsoftstream.com")):
+            if re.search(r'width=(["\'])?476(?:px)?\1', updated_tag, re.IGNORECASE):
+                updated_tag = re.sub(r'width=(["\'])?476(?:px)?\1', r'width=\g<1>900\1', updated_tag, flags=re.IGNORECASE)
+            elif not re.search(r'width=', updated_tag, re.IGNORECASE):
+                updated_tag = re.sub(r'<iframe\b', '<iframe width="900"', updated_tag, count=1, flags=re.IGNORECASE)
+
+            if re.search(r'height=(["\'])?288(?:px)?\1', updated_tag, re.IGNORECASE):
+                updated_tag = re.sub(r'height=(["\'])?288(?:px)?\1', r'height=\g<1>640\1', updated_tag, flags=re.IGNORECASE)
+            elif not re.search(r'height=', updated_tag, re.IGNORECASE):
+                updated_tag = re.sub(r'<iframe\b', '<iframe height="640"', updated_tag, count=1, flags=re.IGNORECASE)
+
+        # Google Drive iframes: auto-supply standard dimensions (1200x640) if missing
+        elif "drive.google.com" in new_src:
+            if not re.search(r'width=', updated_tag, re.IGNORECASE):
+                updated_tag = re.sub(r'<iframe\b', '<iframe width="1200"', updated_tag, count=1, flags=re.IGNORECASE)
+            if not re.search(r'height=', updated_tag, re.IGNORECASE):
+                updated_tag = re.sub(r'<iframe\b', '<iframe height="640"', updated_tag, count=1, flags=re.IGNORECASE)
+
+        return updated_tag
 
     updated_html = re.sub(r'<iframe\b[^>]*>', _replace_iframe_src, raw, flags=re.IGNORECASE)
 
@@ -310,6 +334,10 @@ def build_embed_iframe(code_or_url: str, title: str = "") -> str:
         if "drive.google.com" in embed_url:
             return f'<iframe src="{escaped_url}" width="1200" height="640" allow="autoplay" allowfullscreen></iframe>'
 
+        # Microsoft SharePoint / OneDrive / Stream: width="900" height="640" per user preference
+        if any(k in embed_url for k in ("sharepoint.com", "1drv.ms", "Doc.aspx", "Stream.aspx", "microsoftstream.com")):
+            return f'<iframe src="{escaped_url}" width="900" height="640" frameborder="0" allowfullscreen></iframe>'
+
         # Video players (YouTube, Vimeo, Loom): allow media controls
         if any(v in embed_url for v in ("youtube.com", "vimeo.com", "loom.com")):
             return (
@@ -318,7 +346,7 @@ def build_embed_iframe(code_or_url: str, title: str = "") -> str:
                 f'allowfullscreen></iframe>'
             )
 
-        # SharePoint / Office / Google Docs / Sheets / Slides / Generic
+        # Other / Generic
         return f'<iframe src="{escaped_url}" width="100%" height="600px" frameborder="0" allowfullscreen></iframe>'
 
     # HTML snippet

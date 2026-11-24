@@ -149,6 +149,8 @@ class TestBuildEmbedIframe:
         url = "https://tenant.sharepoint.com/Doc.aspx?sourcedoc={123}&action=default"
         iframe = build_embed_iframe(url)
         assert 'src="https://tenant.sharepoint.com/Doc.aspx?sourcedoc={123}&amp;action=embedview"' in iframe or 'action=embedview' in iframe
+        assert 'width="900"' in iframe
+        assert 'height="640"' in iframe
         assert 'allowfullscreen' in iframe
 
     def test_plain_url_youtube(self):
@@ -169,6 +171,23 @@ class TestBuildEmbedIframe:
         result = build_embed_iframe(raw)
         assert 'action=embedview' in result
         assert 'action=default' not in result
+        # Custom user-defined size 600x400 should be preserved
+        assert 'width="600"' in result
+        assert 'height="400"' in result
+
+    def test_sharepoint_default_tiny_size_auto_upgrades_to_900x640(self):
+        raw = '<iframe src="https://tenant.sharepoint.com/Doc.aspx?sourcedoc={123}&amp;action=default" width="476px" height="288px" frameborder="0"></iframe>'
+        result = build_embed_iframe(raw)
+        assert 'width="900"' in result
+        assert 'height="640"' in result
+        assert '476px' not in result
+        assert '288px' not in result
+
+    def test_sharepoint_iframe_missing_dimensions_auto_adds_900x640(self):
+        raw = '<iframe src="https://tenant.sharepoint.com/Doc.aspx?sourcedoc={123}"></iframe>'
+        result = build_embed_iframe(raw)
+        assert 'width="900"' in result
+        assert 'height="640"' in result
 
 
 class TestSanitizeEmbedHtml:

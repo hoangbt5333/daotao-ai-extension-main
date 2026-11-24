@@ -504,7 +504,7 @@ export default function EditableOutlineTree({
                     placeholder='https://drive.google.com/file/d/.../view hoặc dán mã <iframe src="..."></iframe>'
                     value={editDialog.embedCode || ''}
                     onChange={(e) => setEditDialog(editDialog ? { ...editDialog, embedCode: e.target.value } : null)}
-                    helperText="Dán link chia sẻ (Google Drive, Docs, Sheets, Slides, Forms, SharePoint, Stream, YouTube...) hoặc mã <iframe>. Hệ thống sẽ tự động tạo mã nhúng chuẩn."
+                    helperText="Dán link chia sẻ (Google Drive, Docs, SharePoint, Stream, YouTube...) hoặc mã <iframe>. Tự động tối ưu kích thước hiển thị (Google Drive 1200x640, SharePoint 900x640), hoặc bạn có thể tự chỉnh width/height trong iframe."
                     sx={{ mb: 2 }}
                   />
                 </Box>
