@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: daotao-backend
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      - key: DEBUG
+        value: "false"
+      - key: DEFAULT_LLM_PROVIDER
+        value: openai
+      - key: CORS_ORIGINS
+        value: '["http://localhost:3000"]'
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
