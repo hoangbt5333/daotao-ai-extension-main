@@ -34,7 +34,7 @@ import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import AudioFileIcon from '@mui/icons-material/AudioFile';
 import DescriptionIcon from '@mui/icons-material/Description';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
-import { getApiUrl, API_ENDPOINTS } from "../config/api";
+import { getApiUrl, API_ENDPOINTS, API_CONFIG } from "../config/api";
 import { mergeFiles, formatFileSize, getUnitsWithMissingFiles } from "../utils/fileHelpers";
 
 const steps = [
@@ -130,7 +130,7 @@ export default function CourseGeneratorTool() {
     );
   };
 
-  const BACKEND = "http://localhost:8000";
+  const BACKEND = API_CONFIG.BACKEND_URL;
 
   // Download outline template Excel
   const handleDownloadTemplate = () => {

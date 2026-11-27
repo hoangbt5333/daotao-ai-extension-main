@@ -28,6 +28,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import InputLabel from '@mui/material/InputLabel';
 import FormControl from '@mui/material/FormControl';
+import { API_CONFIG } from '../config/api';
 
 const steps = [
   "Upload/Paste câu hỏi",
@@ -107,7 +108,7 @@ export default function QuestionBankTool() {
     setActiveStep(0);
   };
 
-  const BACKEND = "http://localhost:8000";
+  const BACKEND = API_CONFIG.BACKEND_URL;
 
   // Step 1: Upload/Paste questions
   const handleProcessQuestions = async () => {
@@ -780,7 +781,7 @@ Câu hỏi có nhiều đáp án đúng?
               <Alert severity="success" sx={{ mb: 2 }}>
                 Đã tạo Library thành công!
               </Alert>
-              <a href={`http://localhost:8000${tarFile}`} download>
+              <a href={`${BACKEND}${tarFile}`} download>
                 <Button variant="contained" sx={{ mb: 2 }}>
                   Tải về {libraryName}.tar.gz
                 </Button>

@@ -9,6 +9,7 @@ import {
 import UploadIcon from '@mui/icons-material/Upload';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import { API_CONFIG } from '../config/api';
 
 const steps = [
   "Thông tin video",
@@ -78,7 +79,7 @@ export default function VideoQuizTool() {
   const [error, setError] = useState<string | null>(null);
   const [tarFile, setTarFile] = useState<string | null>(null);
 
-  const BACKEND = "http://localhost:8000";
+  const BACKEND = API_CONFIG.BACKEND_URL;
 
   // Step 1: Video information
   const handleNextToQuestions = () => {

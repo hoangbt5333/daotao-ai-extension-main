@@ -9,6 +9,7 @@ import {
 import UploadIcon from '@mui/icons-material/Upload';
 import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
+import { API_CONFIG } from '../config/api';
 
 const steps = [
   "Thông tin đề thi",
@@ -45,7 +46,7 @@ export default function ExamGeneratorTool() {
   const [loading, setLoading] = useState(false);
   const [tarFile, setTarFile] = useState<string | null>(null);
 
-  const BACKEND = "http://localhost:8000";
+  const BACKEND = API_CONFIG.BACKEND_URL;
 
   // Step 1: Exam information
   const handleNextToQuestions = () => {
@@ -390,7 +391,7 @@ export default function ExamGeneratorTool() {
               <Alert severity="success" sx={{ mb: 2 }}>
                 Đã tạo đề thi thành công!
               </Alert>
-              <a href={`http://localhost:8000${tarFile}`} download>
+              <a href={`${BACKEND}${tarFile}`} download>
                 <Button variant="contained" sx={{ mb: 2 }}>
                   Tải về {examName}.tar.gz
                 </Button>
